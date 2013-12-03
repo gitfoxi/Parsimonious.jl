@@ -87,7 +87,7 @@ type Regex <: Expression
     name::ASCIIString
     re::Base.Regex
 
-    function Regex(pattern; name="unnamed_regex", options="")
+    function Regex(pattern; name="", options="")
         if pattern[1] != '^'
             pattern = "^" * pattern
         end

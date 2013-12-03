@@ -24,6 +24,10 @@ function Node(T::ASCIIString, fulltext, start, _end; children=AbstractNode[], ma
     Node{symbol(T)}(fulltext, start, _end, children, match)
 end
 
+function Node(T::ASCIIString, n::Node)
+    Node{symbol(T)}(n.fulltext, n.start, n._end, n.children, n.match)
+end
+
 function Node()
     EmptyNode()
 end
