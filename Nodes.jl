@@ -1,41 +1,44 @@
 
 module Nodes
 
-# export Node, NodeVisitor, isempty
-using Base: Test
-import Base: isequal, push!, length, start, next, done, match, show
+import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
+export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror
 
 RegexMatchOrNothing = Union(RegexMatch, Nothing)
 
 abstract AbstractNode
 
-immutable Node{T} <: AbstractNode
+immutable Node{T}
     fulltext
     start
     _end
     children
-    match::RegexMatchOrNothing   # for Regex match objects
+    match
 
-    function Node(fulltext::ASCIIString, start::Int, _end::Int, children::Array{AbstractNode,1}, match::RegexMatchOrNothing=nothing)
-        # force me to implement a visitor for every possible thing because dropping to default is so unpredictable
-        new {T}(fulltext, start, _end, children, match)
+    function Node(fulltext, start, _end, children, match)
+        @assert start > 0
+        @assert _end <= length(fulltext)
+        # _end < start is OK and indicates an empty match string
+        new(fulltext, start, _end, children, match)
     end
-
 end
-n0 = Node{:myexpr}("beerbeerbeer", 5, 9, [], nothing)
 
 immutable EmptyNode <: AbstractNode end
 
 function show(io::IO, n::EmptyNode; indent=0)
-    print(io, "EMPTYNODE")
+    show(io, "EMPTYNODE")
+end
+
+function print(io::IO, n::Node)
+    print(io, "<Node called '" * name(n) * "' matching '" * nodetext(n) *"'>")
 end
 
 function show(io::IO, n::Node; indent=0)
     print(io, "\n", repeat(".", indent))
     print(io, typeof(n), "\"")
-    print(io, text(n)[1:min(end,20)])
-    if length(text(n)) > 100
-        print(io, "...", text(n)[max(1,end-20):end])
+    print(io, nodetext(n)[1:min(end,20)])
+    if length(nodetext(n)) > 100
+        print(io, "...", nodetext(n)[max(1,end-20):end])
     end
     print(io, "\"")
     print(io, "(", n.start, ",", n._end, ")")
@@ -52,15 +55,16 @@ end
 # Here, I briefly wish I could have a union of two parametric types so I could
 # make a RegexNode{T} with the extra match field
 
-function Node(T::ASCIIString, fulltext::ASCIIString, start::Int, _end::Int)
+function Node(T, fulltext, start::Int, _end::Int)
     Node{symbol(T)}(fulltext, start, _end, AbstractNode[], nothing)
 end
-function Node(T::ASCIIString, fulltext::ASCIIString, start::Int, _end::Int; children=Node[], match=nothing)
+
+function Node(T, fulltext, start::Int, _end::Int, children=AbstractNode[], match=nothing)
     Node{symbol(T)}(fulltext, start, _end, children, match)
 end
 
 # Copy
-function Node(T::ASCIIString, n::Node)
+function Node(T, n::Node)
     Node(T, n.fulltext, n.start, n._end, n.children, n.match)
 end
 
@@ -68,8 +72,37 @@ function Node()
     EmptyNode()
 end
 
+type VisitationError <:Exception
+    node
+    exc
+    VisitationError(node, exc) = new(node, VisitationError)
+end
+
+VisitationError(node) = VisitationError(node, "VisitationError")
+
+"""Something went wrong while traversing a parse tree.
+
+This exception exists to augment an underlying exception with information
+about where in the parse tree the error occurred. Otherwise, it could be
+tiresome to figure out what went wrong; you'd have to play back the whole
+tree traversal in your head.
+
+"""
+# TODO: Make sure this is pickleable. Probably use @property pattern. Make
+# the original exc and node available on it if they don't cause a whole
+# raft of stack frames to be retained.
+
+function showerror(io::IO, e::VisitationError)
+    print(io, "visitation error")
+    print(io, "Exception: ")
+    print(io, string(e.exc))
+    print(io, "\nParse tree:\n")
+    print(io, prettily(e.node, error=e.node))
+end
+
 function name(n::Node)
     s = string(typeof(n))
+    @show s
     if search(s, ':') == 0
         return ""
     end
@@ -77,13 +110,15 @@ function name(n::Node)
 end
 
 # must each node cary the same reference to fulltext? Probably.
-# TODO: _end is the index of the next character after the end of the match. It
-# should be the one before that but to change it a lot of things will have to
-# change.
-function text(n::Node)
+# TODO: _end is the index of the last character in the end of the match.
+# It used to be the character after that but I'm refactoring so lots to change.
+function nodetext(n::Node)
 #    @show n.start, n._end, typeof(n), length(n.fulltext)
 # TODO: not sure escape goes here or elsewhere
-    escape_string(n.fulltext[n.start:n._end - 1])
+    @show n.fulltext
+    @show n.start
+    @show n._end
+    escape_string(n.fulltext[n.start:n._end])
 end
 
 isempty(::Node) = false
@@ -127,7 +162,7 @@ function escape_newline(s)
 end
 
 function prettily{T}(node::Node{T}, err::AbstractNode=Node())
-    ret = ["<$(T) matching '$(escape_newline(text(node)))'>$(errstring(node, err))"]
+    ret = ["<$(T) matching '$(escape_newline(nodetext(node)))'>$(errstring(node, err))"]
     for child in node
         push!(ret, indent(prettily(child, err)))
     end
@@ -149,8 +184,30 @@ done(n::Node, state) = state > length(n.children)
 
 abstract NodeVisitor
 
-# generic_visit
-function visit{T}(v::NodeVisitor, n::Node{T})
+# depth-first top-level visitation GO!
+# Means you can't overload visit with less than 3 paramaeters without
+# being very carefully. Maybe should give this it's own name like 'visit_all'
+# Though I do appreciate the slickness of naming every function 'visit'
+function visit{T}(v::NodeVisitor, node::Node{T})
+    visited_children = [visit(v, n) for n in node]
+    try
+        return visit(v, node, visited_children)  # ...
+    catch e
+        @show e, v, node
+        @show visited_children
+        if isa(e, VisitationError)
+            rethrow(e)
+        else
+            println("Throwing wrapped expression. Trying to anyway")
+            @show node
+            @show e
+            rethrow(VisitationError(node, e))
+        end
+    end
+end
+
+# generic_visit -- not implemented in base class
+function visit{T}(v::NodeVisitor, n::Node{T}, visited_children)
     error("Go implement visit(::$(typeof(v)), ::Node{$(T)})) right now!")
 end
 
@@ -158,65 +215,5 @@ function lift_child(v::NodeVisitor, n::Node, child)
     @show "lift child", v, typeof(n), child
     return child
 end
-
-# Test
-mytext = "this is my text"
-copytext = string(mytext)
-
-
-
-
-
-
-
-
-n = Node("myexpr", mytext, 5, 9)
-n2 = Node("myexpr", mytext, 5, 9)
-n3 = Node("myexpr2", mytext, 5, 9)
-nct = Node("myexpr", copytext, 5, 9)
-
-@test length(n) == 0
-@test isa(n, Node)
-@test text(n) == " is "
-@test !is(mytext, copytext)
-@test isequal(n, nct)
-@test isempty(Node())
-@test !isempty(n)
-@test isequal(n, n)
-@test isequal(n, n2)
-@test !isequal(n, n3)
-@test isequal(Node(), Node())
-push!(n2, n3)
-push!(n2, Node())
-push!(n2, n3, Node())
-@test !isequal(n, n2)
-@test length(n2.children) == 4
-@test length(n2) == 4
-@test errstring(n, n2) == ""
-@test match(r"Error", errstring(n2, n2)) != nothing
-@test match(r"Error", errstring(n, n2)) == nothing
-@test indent(indent("foo","|"),"|") == "||foo"
-@test indent("foo\nbar","  ") == "  foo\n  bar"
-
-# TODO: test RegexNode
-@show n2
-for n in n2
-    @show n
-end
-println(prettily(n2, n3))
-println(prettily(n2, Node()))
-
-type SomeVisitor <: NodeVisitor end
-@test_throws visit(SomeVisitor(), n2)
-# @test lift_child(SomeVisitor(), n2, "foo") == "foo"
-
-# keyword syntax
-nwc = Node("withchildren", mytext, 1, 4, children=[n n2 n3])
-@test length(nwc.children) == 3
-nwm = Node("withmatch", mytext, 1, 4, match=match(r"\S+", mytext))
-@test nwm.match != nothing
-nwcm = Node("with_match_and_children", mytext, 1, 4, match=match(r"\S+", mytext), children=[n n2 n3])
-@test nwcm.match != nothing
-@test length(nwcm.children) == 3
 
 end

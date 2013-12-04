@@ -3,8 +3,8 @@
 # But it still doesn't seem to work. :(
 module TestExpressions
 
-reload("nodes.jl")
-reload("expressions.jl")
+reload("Nodes.jl")
+reload("Expressions.jl")
 reload("Grammars.jl")
 
 using Base.Test
