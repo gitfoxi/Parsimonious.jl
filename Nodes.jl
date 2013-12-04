@@ -123,7 +123,7 @@ function prettily(node::EmptyNode, err::AbstractNode=Node())
 end
 
 function escape_newline(s)
-    replace(s, r"""\n""", "\\n")
+    replace(s, r"\\n", "\\n")
 end
 
 function prettily{T}(node::Node{T}, err::AbstractNode=Node())
