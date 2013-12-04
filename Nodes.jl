@@ -2,20 +2,20 @@
 module Nodes
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror
+export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!
 
 RegexMatchOrNothing = Union(RegexMatch, Nothing)
 
 abstract AbstractNode
 
-immutable Node{T}
+immutable Node{T} <: AbstractNode
     fulltext
     start
     _end
     children
     match
 
-    function Node(fulltext, start, _end, children, match)
+    function Node(fulltext, start::Integer, _end::Integer, children, match)
         @assert start > 0
         @assert _end <= length(fulltext)
         # _end < start is OK and indicates an empty match string
@@ -26,14 +26,29 @@ end
 immutable EmptyNode <: AbstractNode end
 
 function show(io::IO, n::EmptyNode; indent=0)
-    show(io, "EMPTYNODE")
+    show(io, typeof(n))
 end
+
 
 function print(io::IO, n::Node)
     print(io, "<Node called '" * name(n) * "' matching '" * nodetext(n) *"'>")
 end
 
-function show(io::IO, n::Node; indent=0)
+function show(io::IO, n::Node)
+    ret = {"s = $(repr(n.fulltext))"}
+    
+    repr_children(n::EmptyNode; top_level=true) = string(typeof(n))
+# TODO: Handle the possiblity of match member here
+    function repr_children(n::Node; top_level=true)
+        "$(typeof(n))($(n.start), $(n._end), [" * join([repr_children(c; top_level=false) for c in n.children], ", ") * "]" * (n.match != nothing? ", " * repr(n.match) : "")* ")"
+    end
+    push!(ret, repr_children(n))
+
+    show(io, join(ret, " ; "))
+end
+
+function show_old(io::IO, n::Node; indent=0)
+# Return a bit of code (though not an expression) that will recreate me.
     print(io, "\n", repeat(".", indent))
     print(io, typeof(n), "\"")
     print(io, nodetext(n)[1:min(end,20)])
@@ -55,11 +70,11 @@ end
 # Here, I briefly wish I could have a union of two parametric types so I could
 # make a RegexNode{T} with the extra match field
 
-function Node(T, fulltext, start::Int, _end::Int)
+function Node(T, fulltext, start::Integer, _end::Integer)
     Node{symbol(T)}(fulltext, start, _end, AbstractNode[], nothing)
 end
 
-function Node(T, fulltext, start::Int, _end::Int, children=AbstractNode[], match=nothing)
+function Node(T, fulltext, start::Integer, _end::Integer, children=AbstractNode[], match=nothing)
     Node{symbol(T)}(fulltext, start, _end, children, match)
 end
 
@@ -102,7 +117,6 @@ end
 
 function name(n::Node)
     s = string(typeof(n))
-    @show s
     if search(s, ':') == 0
         return ""
     end
@@ -113,11 +127,7 @@ end
 # TODO: _end is the index of the last character in the end of the match.
 # It used to be the character after that but I'm refactoring so lots to change.
 function nodetext(n::Node)
-#    @show n.start, n._end, typeof(n), length(n.fulltext)
 # TODO: not sure escape goes here or elsewhere
-    @show n.fulltext
-    @show n.start
-    @show n._end
     escape_string(n.fulltext[n.start:n._end])
 end
 
@@ -127,13 +137,8 @@ isequal(::EmptyNode, ::EmptyNode) = true
 
 function isequal(a::Node, b::Node)
     # Can I make the type system do this?
-    @show typeof(a) == typeof(b) 
     typeof(a) == typeof(b) || return false
-    @show length(a) == length(b) 
     length(a) == length(b) || return false
-    @show isequal(a.fulltext, b.fulltext) && a.start == b.start && a._end == b._end 
-    @show a.fulltext
-    @show b.fulltext
     isequal(a.fulltext, b.fulltext) && a.start == b.start && a._end == b._end || return false
     for i in 1:length(a)
         isequal(a.children[i], b.children[i]) || return false
@@ -193,14 +198,9 @@ function visit{T}(v::NodeVisitor, node::Node{T})
     try
         return visit(v, node, visited_children)  # ...
     catch e
-        @show e, v, node
-        @show visited_children
         if isa(e, VisitationError)
             rethrow(e)
         else
-            println("Throwing wrapped expression. Trying to anyway")
-            @show node
-            @show e
             rethrow(VisitationError(node, e))
         end
     end
@@ -212,7 +212,6 @@ function visit{T}(v::NodeVisitor, n::Node{T}, visited_children)
 end
 
 function lift_child(v::NodeVisitor, n::Node, child)
-    @show "lift child", v, typeof(n), child
     return child
 end
 

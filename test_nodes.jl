@@ -11,6 +11,7 @@ using Base.Test
 reload("Nodes.jl")  # for repl debugging
 using Nodes
 import Nodes.visit  # for overloading
+import Nodes: errstring # for testing internal stuff
 
 type HtmlFormatter <: NodeVisitor end
 
@@ -140,10 +141,10 @@ println(n)
 
 s = "hai ö"
 boogie = "böogie"
-n = Node(boogie, s, 1, 3, children=[
-        Node("", s, 4, 4), Node("", s, 5, 5)])
-@test repr(n) == """s = $(repr(s))\nNode($(repr(boogie)), s, 1, 3, children=[Node("", s, 4, 4), Node("", s, 5, 5)])"""
-
+n = Node(boogie, s, 1, 3, [
+        Node("", s, 4, 3), Node("", s, 5, 4)])
+shouldbe = "\"s = \\\"hai ö\\\" ; Node{:böogie}(1, 3, [Node{:}(4, 3, []), Node{:}(5, 4, [])])\""
+@test repr(n) == shouldbe
 # More test I wrote.
 # Test
 mytext = "this is my text"
@@ -156,10 +157,10 @@ copytext = string(mytext)
 
 
 
-n = Node("myexpr", mytext, 5, 9)
-n2 = Node("myexpr", mytext, 5, 9)
-n3 = Node("myexpr2", mytext, 5, 9)
-nct = Node("myexpr", copytext, 5, 9)
+n = Node("myexpr", mytext, 5, 8)
+n2 = Node("myexpr", mytext, 5, 8)
+n3 = Node("myexpr2", mytext, 5, 8)
+nct = Node("myexpr", copytext, 5, 8)
 
 @test length(n) == 0
 @test isa(n, Node)
@@ -181,26 +182,26 @@ push!(n2, n3, Node())
 @test errstring(n, n2) == ""
 @test match(r"Error", errstring(n2, n2)) != nothing
 @test match(r"Error", errstring(n, n2)) == nothing
-@test indent(indent("foo","|"),"|") == "||foo"
-@test indent("foo\nbar","  ") == "  foo\n  bar"
+@test Nodes.indent(Nodes.indent("foo","|"),"|") == "||foo"
+@test Nodes.indent("foo\nbar","  ") == "  foo\n  bar"
 
 # TODO: test RegexNode
 @show n2
 for n in n2
     @show n
 end
-println(prettily(n2, n3))
-println(prettily(n2, Node()))
+println(Nodes.prettily(n2, n3))
+println(Nodes.prettily(n2, Node()))
 
 type SomeVisitor <: NodeVisitor end
 @test_throws visit(SomeVisitor(), n2)
 # @test lift_child(SomeVisitor(), n2, "foo") == "foo"
 
-# keyword syntax
-nwc = Node("withchildren", mytext, 1, 4, children=[n n2 n3])
-@test length(nwc.children) == 3
-nwm = Node("withmatch", mytext, 1, 4, match=match(r"\S+", mytext))
-@test nwm.match != nothing
-nwcm = Node("with_match_and_children", mytext, 1, 4, match=match(r"\S+", mytext), children=[n n2 n3])
-@test nwcm.match != nothing
-@test length(nwcm.children) == 3
+# keyword syntax -- Can't work and also have positional work
+# nwc = Node("withchildren", mytext, 1, 4, children=[n n2 n3])
+# @test length(nwc.children) == 3
+# nwm = Node("withmatch", mytext, 1, 4, match=match(r"\S+", mytext))
+# @test nwm.match != nothing
+# nwcm = Node("with_match_and_children", mytext, 1, 4, match=match(r"\S+", mytext), children=[n n2 n3])
+# @test nwcm.match != nothing
+# @test length(nwcm.children) == 3
