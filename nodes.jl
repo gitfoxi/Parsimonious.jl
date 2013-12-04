@@ -3,33 +3,77 @@ module Nodes
 
 # export Node, NodeVisitor, isempty
 using Base: Test
-import Base: isequal, push!, length, start, next, done, match
+import Base: isequal, push!, length, start, next, done, match, show
+
+RegexMatchOrNothing = Union(RegexMatch, Nothing)
 
 abstract AbstractNode
-RegexMatchOrNothing = Union(RegexMatch, Nothing)
+
 immutable Node{T} <: AbstractNode
     fulltext
     start
     _end
     children
     match::RegexMatchOrNothing   # for Regex match objects
+
+    function Node(fulltext::ASCIIString, start::Int, _end::Int, children::Array{AbstractNode,1}, match::RegexMatchOrNothing=nothing)
+        # force me to implement a visitor for every possible thing because dropping to default is so unpredictable
+        new {T}(fulltext, start, _end, children, match)
+    end
+
+end
+n0 = Node{:myexpr}("beerbeerbeer", 5, 9, [], nothing)
+
+immutable EmptyNode <: AbstractNode end
+
+function show(io::IO, n::EmptyNode; indent=0)
+    print(io, "EMPTYNODE")
+end
+
+function show(io::IO, n::Node; indent=0)
+    print(io, "\n", repeat(".", indent))
+    print(io, typeof(n), "\"")
+    print(io, text(n)[1:min(end,20)])
+    if length(text(n)) > 100
+        print(io, "...", text(n)[max(1,end-20):end])
+    end
+    print(io, "\"")
+    print(io, "(", n.start, ",", n._end, ")")
+    if length(n.children) > 0
+        print(io, "{")
+        for child in n.children
+            show(io, child, indent=indent+1)
+            print(io, ",")
+        end
+        print(io, "}")
+    end
 end
 
 # Here, I briefly wish I could have a union of two parametric types so I could
 # make a RegexNode{T} with the extra match field
 
-immutable EmptyNode <: AbstractNode end
-
-function Node(T::ASCIIString, fulltext, start, _end; children=AbstractNode[], match=nothing)
+function Node(T::ASCIIString, fulltext::ASCIIString, start::Int, _end::Int)
+    Node{symbol(T)}(fulltext, start, _end, AbstractNode[], nothing)
+end
+function Node(T::ASCIIString, fulltext::ASCIIString, start::Int, _end::Int; children=Node[], match=nothing)
     Node{symbol(T)}(fulltext, start, _end, children, match)
 end
 
+# Copy
 function Node(T::ASCIIString, n::Node)
-    Node{symbol(T)}(n.fulltext, n.start, n._end, n.children, n.match)
+    Node(T, n.fulltext, n.start, n._end, n.children, n.match)
 end
 
 function Node()
     EmptyNode()
+end
+
+function name(n::Node)
+    s = string(typeof(n))
+    if search(s, ':') == 0
+        return ""
+    end
+    s[search(s, ':')+1:end-1]
 end
 
 # must each node cary the same reference to fulltext? Probably.
@@ -38,7 +82,8 @@ end
 # change.
 function text(n::Node)
 #    @show n.start, n._end, typeof(n), length(n.fulltext)
-    n.fulltext[n.start:n._end - 1]
+# TODO: not sure escape goes here or elsewhere
+    escape_string(n.fulltext[n.start:n._end - 1])
 end
 
 isempty(::Node) = false
@@ -47,10 +92,18 @@ isequal(::EmptyNode, ::EmptyNode) = true
 
 function isequal(a::Node, b::Node)
     # Can I make the type system do this?
+    @show typeof(a) == typeof(b) 
     typeof(a) == typeof(b) || return false
+    @show length(a) == length(b) 
     length(a) == length(b) || return false
-    a.children == b.children || return false
-    is(a.fulltext, b.fulltext) && a.start == b.start && a._end == b._end || return false
+    @show isequal(a.fulltext, b.fulltext) && a.start == b.start && a._end == b._end 
+    @show a.fulltext
+    @show b.fulltext
+    isequal(a.fulltext, b.fulltext) && a.start == b.start && a._end == b._end || return false
+    for i in 1:length(a)
+        isequal(a.children[i], b.children[i]) || return false
+    end
+    true
 end
 
 function push!(node::AbstractNode, child::AbstractNode...)
@@ -95,24 +148,28 @@ end
 done(n::Node, state) = state > length(n.children)
 
 abstract NodeVisitor
-#type ConcreteVisitor <: NodeVisitor
-#    state
-#end
 
 # generic_visit
 function visit{T}(v::NodeVisitor, n::Node{T})
     error("Go implement visit(::$(typeof(v)), ::Node{$(T)})) right now!")
 end
 
-# TODO: Not sure what this is for so it's probably not right
-function lift_child(v::NodeVisitor, n::Node)
-    # convience method to replace this node with it's first child
-    n.children[1]
+function lift_child(v::NodeVisitor, n::Node, child)
+    @show "lift child", v, typeof(n), child
+    return child
 end
 
 # Test
 mytext = "this is my text"
 copytext = string(mytext)
+
+
+
+
+
+
+
+
 n = Node("myexpr", mytext, 5, 9)
 n2 = Node("myexpr", mytext, 5, 9)
 n3 = Node("myexpr2", mytext, 5, 9)
@@ -122,7 +179,7 @@ nct = Node("myexpr", copytext, 5, 9)
 @test isa(n, Node)
 @test text(n) == " is "
 @test !is(mytext, copytext)
-@test !isequal(n, nct)
+@test isequal(n, nct)
 @test isempty(Node())
 @test !isempty(n)
 @test isequal(n, n)
@@ -151,7 +208,7 @@ println(prettily(n2, Node()))
 
 type SomeVisitor <: NodeVisitor end
 @test_throws visit(SomeVisitor(), n2)
-@test lift_child(SomeVisitor(), n2) == n3
+# @test lift_child(SomeVisitor(), n2, "foo") == "foo"
 
 # keyword syntax
 nwc = Node("withchildren", mytext, 1, 4, children=[n n2 n3])

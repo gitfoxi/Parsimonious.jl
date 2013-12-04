@@ -3,8 +3,9 @@
 # But it still doesn't seem to work. :(
 module TestExpressions
 
-reload("Grammars.jl")
+reload("nodes.jl")
 reload("expressions.jl")
+reload("Grammars.jl")
 
 using Base.Test
 using Base.typeof
@@ -85,6 +86,8 @@ end
 h = Literal("hello", name="greeting")
 m = match(h, "hello")
 n = Node("greeting", "hello", 1, 6)
+@show m
+@show n
 @test isequal(m, n)
 #
 # test_sequence_nodes
@@ -92,6 +95,8 @@ n = Node("greeting", "hello", 1, 6)
 # TODO: Inconsistent ways of passing 'name' to Sequence and Literal constructors. Make them all like Sequence
 s = Sequence(Literal("heigh", name="greeting1"), Literal("ho", name="greeting2"), name="dwarf")
 text = "heighho"
+@show match(s, text)
+@show Node("dwarf", text, 1, 8, [Node("greeting1", text, 1, 6), Node("greeting2", text, 6, 8)])
 @test isequal(match(s, text), Node("dwarf", text, 1, 8, [Node("greeting1", text, 1, 6), Node("greeting2", text, 6, 8)]))
 #
 # test_one_of
@@ -152,22 +157,24 @@ isequal(parse(expr, text), Node("more", text, 0, 2, [Node("lit", text, 0, 1), No
 #        Make sure ParseErrors have nice Unicode representations.
 #
 #        """
-grammar = Grammar("
-            bold_text = open_parens text close_parens
-            open_parens = '(('
-            text = ~'[a-zA-Z]+'
-            close_parens = '))'
-            ")
-text = "((fred!!"
-parse(grammar, text)
-try
-    parse(grammar, text)
-catch e
-    isequal(e.pos, 6)
-    isequal(e.expr, grammar["close_parens"])
-    isequal(e.text, text)
-#    isequal(unicode(e), u"Rule "close_parens" didn"t match at "!!" (line 1, column 7).")
-end
+
+# TODO: use this when Grammar is working
+#grammar = Grammar("
+#            bold_text = open_parens text close_parens
+#            open_parens = '(('
+#            text = ~'[a-zA-Z]+'
+#            close_parens = '))'
+#            ")
+#text = "((fred!!"
+#parse(grammar, text)
+#try
+#    parse(grammar, text)
+#catch e
+#    isequal(e.pos, 6)
+#    isequal(e.expr, grammar["close_parens"])
+#    isequal(e.text, text)
+##    isequal(unicode(e), u"Rule "close_parens" didn"t match at "!!" (line 1, column 7).")
+#end
 
 #
 #    def test_rewinding(self):

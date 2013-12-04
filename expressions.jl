@@ -3,6 +3,8 @@
 
 module Expressions
 
+export Regex
+
 import Base: match
 import Nodes: Node, isempty
 
@@ -17,7 +19,7 @@ end
 function parse(expr::Expression, text::ASCIIString, pos::Int64=1)
     node = match(expr, text, pos)
     if node._end < length(text) + 1
-        error("Incomplete parse, stopped at char $(node._end) of $(pos): $(text[node._end:node._end+100])")
+        error("Incomplete parse, stopped at char $(node._end) of $(pos): $(text[node._end:min(end, node._end+100)])")
     end
     node
 end
@@ -88,6 +90,8 @@ type Regex <: Expression
     re::Base.Regex
 
     function Regex(pattern; name="", options="")
+        @assert(length(pattern) > 0)
+        @show pattern
         if pattern[1] != '^'
             pattern = "^" * pattern
         end
