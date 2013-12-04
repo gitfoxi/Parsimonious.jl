@@ -290,7 +290,7 @@ function visit(v::RuleVisitor, n::Node{:rules}, _, rules...)
         end
     end
 
-    return rule_map, rules[0]
+    return rule_map, rules[1]
 end
 
 # TODO: Need a function for escaping \n, \t etc
