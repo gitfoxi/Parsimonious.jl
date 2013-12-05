@@ -43,6 +43,7 @@ end
 @test len_eq(match(Sequence(Regex("hi*")), ">hiiii", 2), 5)  # non-0 pos
 #
 ## test_one_of:
+@test len_eq(match(Literal("aaa"), "aaa"), 3)  # first alternative
 @test len_eq(match(OneOf(Literal("aaa"), Literal("bb")), "aaa"), 3)  # first alternative
 @test len_eq(match(OneOf(Literal("aaa"), Literal("bb")), "bbaaa"), 2)  # second
 @test_throws match(OneOf(Literal("aaa"), Literal("bb")), "aa")  # no match
@@ -83,8 +84,6 @@ end
 h = Literal("hello", name="greeting")
 m = match(h, "hello")
 n = Node("greeting", "hello", 1, 5)
-@show m
-@show n
 @test isequal(m, n)
 #
 # test_sequence_nodes
@@ -92,8 +91,6 @@ n = Node("greeting", "hello", 1, 5)
 # TODO: Inconsistent ways of passing 'name' to Sequence and Literal constructors. Make them all like Sequence
 s = Sequence(Literal("heigh", name="greeting1"), Literal("ho", name="greeting2"), name="dwarf")
 text = "heighho"
-@show match(s, text)
-@show Node("dwarf", text, 1, 7, [Node("greeting1", text, 1, 5), Node("greeting2", text, 6, 7)])
 @test isequal(match(s, text), Node("dwarf", text, 1, 7, [Node("greeting1", text, 1, 5), Node("greeting2", text, 6, 7)]))
 #
 # test_one_of
@@ -262,57 +259,63 @@ isequal(parse(expr, text), Node("more", text, 1, 2, [Node("lit", text, 1, 1), No
 #        """
 #        unicode(rule_grammar)
 
-type TestExpression <: Expressions.Expression
+type TestExpression <: Expression
     name
 end
-mye = ParseError("foo\nfoo\n", TestExpression("tst"), 4)
+mye = ParseError("foo\nfoo\n", TestExpression("tst"), 5)
 @test Expressions.line(mye) == 2
 @test Expressions.column(mye) == 1
-myf = ParseError("foo\nfoo\n", TestExpression("tst"), 3)
+mye = ParseError("foo\nfoo\n", TestExpression("tst"), 4)
+@test Expressions.line(mye) == 1
+@test Expressions.column(mye) == 4
+myf = ParseError("foo\nfoo\n", TestExpression("tst"), 1)
 @test Expressions.line(myf) == 1
-@test Expressions.column(myf) == 3
+@test Expressions.column(myf) == 1
 myio = IOString()
 showerror(myio, myf)
 seekstart(myio)
-@test readline(myio) == "Rule tst didn't match at 'o\\nfoo\\n' (line 1, column 3).'"
-# TODO: Only problem: When it throws the error, it doesn't actually
-# show my custom error message. Gaaa
+@test readline(myio) == "Rule tst didn't match at 'foo\\nfoo\\n' (line 1, column 1).'"
 
 # Test
-# TODO: move to test_expressions.jl
 
 l = Literal("foo", name="foo")
-println(l)
 t = parse(l, "foo", 1)
-println(t)
+# see error messages:
+@test_throws parse(l, "fooo", 1)
+@test_throws parse(l, "bar", 1)
 try
-    println(parse(l, "foos", 1))
+    parse(l, "foos", 1)
 catch e
-    println(e)
+    @test typeof(e) == IncompleteParseError
 end
 try
-    println(parse(l, "bar", 1))
+    parse(l, "bar", 1)
 catch e
-    println(e)
-end
-println(parse(Literal("foo"), "foo"))
-println(parse(Regex("fo.*", options="", name="myregex"), "fooooo", 1))
-println(parse(Sequence(l,l), "foofoo", 1))
-println(parse(OneOf(Literal("foo"), Literal("bar")), "bar", 1))
-println(parse(Sequence(Lookahead(Literal("fo")), Literal("foo")), "foo"))
-println(parse(Sequence(Not(Literal("bar")), Literal("foo")), "foo"))
-println(parse(Sequence(Optional(Literal("bar")), Literal("foo")), "foo"))
-println(parse(Sequence(Optional(Literal("bar")), Literal("foo")), "barfoo"))
-println(parse(ZeroOrMore(Literal("bar")), ""))
-println(parse(ZeroOrMore(Literal("bar")), "bar"))
-println(parse(ZeroOrMore(Literal("bar")), "barbar"))
-println(parse(OneOrMore(Literal("bar")), "barbar"))
-println(parse(OneOrMore(Literal("bar")), "bar"))
-try
-    println(parse(OneOrMore(Literal("bar")), "bas"))
-catch e
-    println(e)
+    @test typeof(e) == ParseError
 end
 
+@test parse(Literal("foo"), "foo") == Node("", "foo", 1, 3)
+@test parse(Literal("foo", "foorule"), "foo") == Node("foorule", "foo", 1, 3)
+
+
+
+@test parse(Regex("fo.*", options="", name="myregex"), "fooooo", 1) == Node("myregex", "fooooo", 1, 6)
+@test_throws parse(Regex("fo.*", options="", name="myregex"), "FOOOOO", 1) == Node("myregex", "FOOOOO", 1, 6)
+@test parse(Regex("fo.*", options="i", name="myregex"), "FOOOOO", 1) == Node("myregex", "FOOOOO", 1, 6)
+@test parse(Sequence("seq", l, l), "foofoo", 1) == Node("seq", "foofoo", 1, 6, [Node("foo", "foofoo", 1, 3), Node("foo", "foofoo", 4, 6), ])
+@test parse(OneOf(Literal("foo"), Literal("bar")), "bar", 1) == Node("", "bar", 1, 3, [Node("", "bar", 1, 3)])
+@test parse(Sequence(Lookahead(Literal("fo")), Literal("foo")), "foo") == Node("", "foo", 1, 3, [Node("", "foo", 1, 0), Node("", "foo", 1, 3)])
+@test parse(Sequence(Not(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, [Node("", "foo", 1, 0) Node("", "foo", 1, 3)])
+@test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, [Node("", "foo", 1, 0), Node("", "foo", 1, 3)])
+@test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "barfoo") == Node("", "barfoo", 1, 6, [Node("", "barfoo", 1, 3, [Node("", "barfoo", 1, 3)]), Node("", "barfoo", 4, 6)])
+@test parse(ZeroOrMore(Literal("bar")), "") == Node("", "", 1, 0)
+@test parse(ZeroOrMore(Literal("bar")), "bar") == Node("", "bar", 1, 3, [Node("", "bar", 1, 3)])
+@test parse(ZeroOrMore(Literal("bar")), "barbar") == Node("", "barbar", 1, 6, [Node("", "barbar", 1, 3), Node("", "barbar", 4, 6)])
+@test_throws parse(OneOrMore(Literal("bar")), "")
+@test parse(OneOrMore(Literal("bar")), "barbar") == Node("", "barbar", 1, 6, [Node("", "barbar", 1, 3), Node("", "barbar", 4, 6)])
+@test parse(OneOrMore(Literal("bar")), "bar") == Node("", "bar", 1, 3, [Node("", "bar", 1, 3)])
+@test_throws parse(OneOrMore(Literal("bar")), "bas")
+te = TestExpression("tst")
+@test Sequence("", te, te) == Sequence(te, te, name="") == Sequence(te, te)
 
 end
