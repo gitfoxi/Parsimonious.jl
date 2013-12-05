@@ -5,18 +5,16 @@ export Regex
 
 import Base: match, rsearch, length
 using Nodes
-export showerror, ParseError
+export showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead
 
 abstract Expression # -ism
 
 type ParseError <: Exception
     text::ASCIIString
     expr::Expression
-    pos::Int64
+    pos::Integer
 end
 
-# TODO: Only problem: When it throws the error, it doesn't actually
-# show my custom error message. Gaaa
 function showerror(io::IO, e::ParseError)
     print(io, escape_string("Rule $(e.expr.name) didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e))).'"))
 end
@@ -28,25 +26,10 @@ function column(e::ParseError)
     lastnewline == 0 ? e.pos : e.pos - lastnewline + 1
 end
 
-# TODO: to test_expressions.jl
-using Base.Test
-type TestExpression <: Expression
-    name
-end
-mye = ParseError("foo\nfoo\n", TestExpression("tst"), 4)
-@test line(mye) == 2
-@test column(mye) == 1
-myf = ParseError("foo\nfoo\n", TestExpression("tst"), 3)
-@test line(myf) == 1
-@test column(myf) == 3
-myio = IOString()
-showerror(myio, myf)
-seekstart(myio)
-@test readline(myio) == "Rule tst didn't match at 'o\\nfoo\\n' (line 1, column 3).'"
-
 function parse(expr::Expression, text::ASCIIString, pos::Int64=1)
     node = match(expr, text, pos)
     if node._end != length(text)
+        # TODO: IncompleteParseError <: Exception
         error(escape_string("Incomplete parse, stopped at char $(node._end) of $(pos): $(text[node._end:min(end, node._end+100)])"))
     end
     node
@@ -270,15 +253,6 @@ type ZeroOrMore <: _Compound
     end
 end
 
-# Since length(node) is its number of children for iteration purposes
-# call the length of the text of the node textlength
-textlength(node::Node) = node._end - node.start + 1
-
-# TODO: move to test_expressions.jl
-@test textlength(Node("foo","",1,0)) == 0
-@test textlength(Node("foo","f", 1,1)) == 1
-@test textlength(Node("foo","foo", 1,3)) == 3
-
 function _uncached_match(self::ZeroOrMore, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     new_pos = pos
     children = Node[]
@@ -330,42 +304,6 @@ end
 
 function _as_rhs(e::Optional)
     join(e.members, " ") * "+"
-end
-
-# Test
-# TODO: move to test_expressions.jl
-
-l = Literal("foo", name="foo")
-println(l)
-t = parse(l, "foo", 1)
-println(t)
-try
-    println(parse(l, "foos", 1))
-catch e
-    println(e)
-end
-try
-    println(parse(l, "bar", 1))
-catch e
-    println(e)
-end
-println(parse(Literal("foo"), "foo"))
-println(parse(Regex("fo.*", options="", name="myregex"), "fooooo", 1))
-println(parse(Sequence(l,l), "foofoo", 1))
-println(parse(OneOf(Literal("foo"), Literal("bar")), "bar", 1))
-println(parse(Sequence(Lookahead(Literal("fo")), Literal("foo")), "foo"))
-println(parse(Sequence(Not(Literal("bar")), Literal("foo")), "foo"))
-println(parse(Sequence(Optional(Literal("bar")), Literal("foo")), "foo"))
-println(parse(Sequence(Optional(Literal("bar")), Literal("foo")), "barfoo"))
-println(parse(ZeroOrMore(Literal("bar")), ""))
-println(parse(ZeroOrMore(Literal("bar")), "bar"))
-println(parse(ZeroOrMore(Literal("bar")), "barbar"))
-println(parse(OneOrMore(Literal("bar")), "barbar"))
-println(parse(OneOrMore(Literal("bar")), "bar"))
-try
-    println(parse(OneOrMore(Literal("bar")), "bas"))
-catch e
-    println(e)
 end
 
 end

@@ -2,7 +2,7 @@
 module Nodes
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode
+export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
 
 RegexMatchOrNothing = Union(RegexMatch, Nothing)
 
@@ -52,6 +52,10 @@ end
 function Node()
     EmptyNode()
 end
+
+# Since length(node) is its number of children for iteration purposes
+# call the length of the text of the node textlength
+textlength(node::Node) = node._end - node.start + 1
 
 function show(io::IO, n::EmptyNode; indent=0)
     show(io, typeof(n))

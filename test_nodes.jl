@@ -225,4 +225,8 @@ type SomeVisitor <: NodeVisitor end
 end
 end
 
+@test textlength(Node("foo","",1,0)) == 0
+@test textlength(Node("foo","f", 1,1)) == 1
+@test textlength(Node("foo","foo", 1,3)) == 3
+
 end

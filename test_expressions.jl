@@ -10,8 +10,9 @@ reload("Grammars.jl")
 using Base.Test
 using Base.typeof
 import Grammars.Grammar
-import Expressions: Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, Expression, parse
+# import Expressions: Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, Expression, parse
 using Nodes
+using Expressions
 
 function len_eq(node, length)
     node_length = node._end - node.start + 1
@@ -260,5 +261,58 @@ isequal(parse(expr, text), Node("more", text, 1, 2, [Node("lit", text, 1, 1), No
 #
 #        """
 #        unicode(rule_grammar)
+
+type TestExpression <: Expressions.Expression
+    name
+end
+mye = ParseError("foo\nfoo\n", TestExpression("tst"), 4)
+@test Expressions.line(mye) == 2
+@test Expressions.column(mye) == 1
+myf = ParseError("foo\nfoo\n", TestExpression("tst"), 3)
+@test Expressions.line(myf) == 1
+@test Expressions.column(myf) == 3
+myio = IOString()
+showerror(myio, myf)
+seekstart(myio)
+@test readline(myio) == "Rule tst didn't match at 'o\\nfoo\\n' (line 1, column 3).'"
+# TODO: Only problem: When it throws the error, it doesn't actually
+# show my custom error message. Gaaa
+
+# Test
+# TODO: move to test_expressions.jl
+
+l = Literal("foo", name="foo")
+println(l)
+t = parse(l, "foo", 1)
+println(t)
+try
+    println(parse(l, "foos", 1))
+catch e
+    println(e)
+end
+try
+    println(parse(l, "bar", 1))
+catch e
+    println(e)
+end
+println(parse(Literal("foo"), "foo"))
+println(parse(Regex("fo.*", options="", name="myregex"), "fooooo", 1))
+println(parse(Sequence(l,l), "foofoo", 1))
+println(parse(OneOf(Literal("foo"), Literal("bar")), "bar", 1))
+println(parse(Sequence(Lookahead(Literal("fo")), Literal("foo")), "foo"))
+println(parse(Sequence(Not(Literal("bar")), Literal("foo")), "foo"))
+println(parse(Sequence(Optional(Literal("bar")), Literal("foo")), "foo"))
+println(parse(Sequence(Optional(Literal("bar")), Literal("foo")), "barfoo"))
+println(parse(ZeroOrMore(Literal("bar")), ""))
+println(parse(ZeroOrMore(Literal("bar")), "bar"))
+println(parse(ZeroOrMore(Literal("bar")), "barbar"))
+println(parse(OneOrMore(Literal("bar")), "barbar"))
+println(parse(OneOrMore(Literal("bar")), "bar"))
+try
+    println(parse(OneOrMore(Literal("bar")), "bas"))
+catch e
+    println(e)
+end
+
 
 end
