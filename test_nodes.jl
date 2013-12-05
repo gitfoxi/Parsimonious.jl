@@ -208,13 +208,21 @@ type SomeVisitor <: NodeVisitor end
 @test_throws visit(SomeVisitor(), n2)
 @test lift_child(SomeVisitor(), n2, ["foo"]) == ["foo"]
 
-# keyword syntax -- Can't work and also have positional work :(
-# nwc = Node("withchildren", mytext, 1, 4, children=[n n2 n3])
-# @test length(nwc.children) == 3
-# nwm = Node("withmatch", mytext, 1, 4, match=match(r"\S+", mytext))
-# @test nwm.match != nothing
-# nwcm = Node("with_match_and_children", mytext, 1, 4, match=match(r"\S+", mytext), children=[n n2 n3])
-# @test nwcm.match != nothing
-# @test length(nwcm.children) == 3
+# keyword syntax
+# many tests because I thought for a long time this can't work
+# I strongly suspect it is slow
+@time begin for i in 1:1000
+    nwc = Node(T="withchildren", fulltext=mytext, start=1, _end=4, children=[n n2 n3])
+    @test length(nwc) == 3
+    nwd = Node(T="nochildren", fulltext=mytext, start=1, _end=4)
+    @test length(nwd) == 0
+    m=match(r"\S+", mytext)
+    nwe = Node(match=m, _end=4, start=1, fulltext=mytext, T="withchildren")
+    @test isa(nwe.match, RegexMatch)
+    nwf = Node("withchildren", mytext, 1, 0, children=[n n2 n3])
+    nwg = Node("withchildren", mytext, 1, 0, match=m, children=[n n2 n3])
+    nwh = Node("withchildren", mytext, 1, 0, match=m)
+end
+end
 
 end

@@ -1,7 +1,7 @@
 
 # I'm a module so that I can re-include Expressions every time so I get updates to the code
 # But it still doesn't seem to work. :(
-module TestExpressions
+module test_expressions
 
 reload("Nodes.jl")
 reload("Expressions.jl")
@@ -11,11 +11,7 @@ using Base.Test
 using Base.typeof
 import Grammars.Grammar
 import Expressions: Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, Expression, parse
-import Nodes: Node, isequal
-# require("test")
-
-
-@test 1==1
+using Nodes
 
 function len_eq(node, length)
     node_length = node._end - node.start

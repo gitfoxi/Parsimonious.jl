@@ -1,25 +1,53 @@
 
-# TODO:  _as_rhs
-
 module Expressions
 
 export Regex
 
-import Base: match
-import Nodes: Node, isempty
+import Base: match, rsearch, length
+using Nodes
+export showerror, ParseError
 
 abstract Expression # -ism
 
-type ParseError
+type ParseError <: Exception
     text::ASCIIString
     expr::Expression
     pos::Int64
 end
 
+# TODO: Only problem: When it throws the error, it doesn't actually
+# show my custom error message. Gaaa
+function showerror(io::IO, e::ParseError)
+    print(io, escape_string("Rule $(e.expr.name) didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e))).'"))
+end
+
+line(e::ParseError) = 1 + count(e.text[1:e.pos]) do c c == '\n' end
+
+function column(e::ParseError)
+    lastnewline = rsearch(e.text, '\n', e.pos)
+    lastnewline == 0 ? e.pos : e.pos - lastnewline + 1
+end
+
+# TODO: to test_expressions.jl
+using Base.Test
+type TestExpression <: Expression
+    name
+end
+mye = ParseError("foo\nfoo\n", TestExpression("tst"), 4)
+@test line(mye) == 2
+@test column(mye) == 1
+myf = ParseError("foo\nfoo\n", TestExpression("tst"), 3)
+@test line(myf) == 1
+@test column(myf) == 3
+myio = IOString()
+showerror(myio, myf)
+seekstart(myio)
+@test readline(myio) == "Rule tst didn't match at 'o\\nfoo\\n' (line 1, column 3).'"
+
 function parse(expr::Expression, text::ASCIIString, pos::Int64=1)
     node = match(expr, text, pos)
-    if node._end < length(text) + 1
-        error("Incomplete parse, stopped at char $(node._end) of $(pos): $(text[node._end:min(end, node._end+100)])")
+    if node._end != length(text)
+        error(escape_string("Incomplete parse, stopped at char $(node._end) of $(pos): $(text[node._end:min(end, node._end+100)])"))
     end
     node
 end
@@ -30,7 +58,7 @@ function match(expr::Expression, text::ASCIIString, pos::Int64=1)
     if isempty(node)
         println("err.text: ", err.text)
         println("expr: ", expr)
-        error(err.text)
+        throw(err)
     end
     node
 end
@@ -47,6 +75,7 @@ function _match!(expr::Expression, text::ASCIIString, pos::Int64, cache::Dict, e
 
     if isempty(node) && pos >= err.pos && (
         Base.isempty(expr.name) || Base.isempty(err.expr.name))
+        # TODO: ParseError?
         err.expr = expr
         err.pos = pos
     end
@@ -76,9 +105,9 @@ end
 
 function _uncached_match(literal::Literal, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     if beginswith(text[pos:], literal.literal)
-        return Node(literal.name, text, pos, pos + length(literal.literal))
+        return Node(literal.name, text, pos, pos - 1 + length(literal.literal))
     end
-    Node()  # "Empty" node
+    EmptyNode()  # "Empty" node
 end
 
 function _as_rhs(literal::Literal)
@@ -103,10 +132,10 @@ end
 function _uncached_match(regex::Regex, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     m = match(regex.re, text[pos:])
     if isa(m, Nothing)
-        return Node()
+        return EmptyNode()
     end
     assert(m.offset == 1)  # should only match start of text
-    Node(regex.name, text, pos, pos + length(m.match), match=m)
+    Node(regex.name, text, pos, pos - 1 + length(m.match), match=m)
 end
 
 function _as_rhs(regex::Regex)
@@ -135,12 +164,11 @@ function _uncached_match(sequence::Sequence, text::ASCIIString, pos::Int64, cach
             return node
         end
         push!(children, node)
-        length = node._end - node.start
-        new_pos += length
-        length_of_sequence += length
+        new_pos += textlength(node)
+        length_of_sequence += textlength(node)
     end
     # Hooray! We got through all the members!
-    return Node(sequence.name, text, pos, pos + length_of_sequence, children=children)
+    return Node(sequence.name, text, pos, pos + length_of_sequence - 1, children)
 end
 
 function _as_rhs(sequence::Sequence)
@@ -160,10 +188,10 @@ function _uncached_match(oneof::OneOf, text::ASCIIString, pos::Int64, cache::Dic
     for m in oneof.members
         node = _match!(m, text, pos, cache, err)
         if !isempty(node)
-            return Node(oneof.name, text, pos, node._end, children=[node])
+            return Node(oneof.name, text, pos, node._end, [node])
         end
     end
-    return Node()
+    return EmptyNode()
 end
 
 function _as_rhs(e::OneOf)
@@ -182,9 +210,9 @@ end
 function _uncached_match(self::Lookahead, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     node = _match!(self.members[1], text, pos, cache, err)
     if !isempty(node)
-        return Node(self.name, text, pos, pos)
+        return Node(self.name, text, pos, pos - 1)
     end
-    return Node()
+    return EmptyNode()
 end
 
 function _as_rhs(e::Lookahead)
@@ -203,9 +231,9 @@ end
 function _uncached_match(self::Not, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     node = _match!(self.members[1], text, pos, cache, err)
     if isempty(node)
-        return Node(self.name, text, pos, pos)
+        return Node(self.name, text, pos, pos - 1)
     end
-    return Node()
+    return EmptyNode()
 end
 
 function _as_rhs(e::Not)
@@ -224,9 +252,9 @@ end
 function _uncached_match(self::Optional, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     node = _match!(self.members[1], text, pos, cache, err)
     if isempty(node)
-        return Node(self.name, text, pos, pos)
+        return Node(self.name, text, pos, pos - 1)
     end
-    return Node(self.name, text, pos, node._end, children=[node])
+    return Node(self.name, text, pos, node._end, [node])
 end
 
 function _as_rhs(e::Optional)
@@ -242,18 +270,27 @@ type ZeroOrMore <: _Compound
     end
 end
 
+# Since length(node) is its number of children for iteration purposes
+# call the length of the text of the node textlength
+textlength(node::Node) = node._end - node.start + 1
+
+# TODO: move to test_expressions.jl
+@test textlength(Node("foo","",1,0)) == 0
+@test textlength(Node("foo","f", 1,1)) == 1
+@test textlength(Node("foo","foo", 1,3)) == 3
+
 function _uncached_match(self::ZeroOrMore, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     new_pos = pos
     children = Node[]
     while true
         node = _match!(self.members[1], text, new_pos, cache, err)
-        if isempty(node) || (node._end - node.start) == 0
-            return Node(self.name, text, pos, new_pos, children=children)
+        if isempty(node) || textlength(node) == 0
+            return Node(self.name, text, pos, new_pos - 1, children)
         end
         push!(children, node)
-        new_pos += node._end - node.start
+        new_pos += textlength(node)
     end
-    return Node()
+    return EmptyNode()
 end
 
 function _as_rhs(e::Optional)
@@ -279,16 +316,16 @@ function _uncached_match(self::OneOrMore, text::ASCIIString, pos::Int64, cache::
             break
         end
         push!(children, node)
-        len = node._end - node.start
+        len = textlength(node)
         if len == 0
             break
         end
         new_pos += len
     end
     if length(children) >= self._min
-        return Node(self.name, text, pos, new_pos, children=children)
+        return Node(self.name, text, pos, new_pos - 1, children)
     end
-    return Node()
+    return EmptyNode()
 end
 
 function _as_rhs(e::Optional)
@@ -296,6 +333,7 @@ function _as_rhs(e::Optional)
 end
 
 # Test
+# TODO: move to test_expressions.jl
 
 l = Literal("foo", name="foo")
 println(l)
@@ -311,6 +349,7 @@ try
 catch e
     println(e)
 end
+println(parse(Literal("foo"), "foo"))
 println(parse(Regex("fo.*", options="", name="myregex"), "fooooo", 1))
 println(parse(Sequence(l,l), "foofoo", 1))
 println(parse(OneOf(Literal("foo"), Literal("bar")), "bar", 1))

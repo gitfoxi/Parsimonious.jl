@@ -2,11 +2,13 @@
 module Nodes
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child
+export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode
 
 RegexMatchOrNothing = Union(RegexMatch, Nothing)
 
 abstract AbstractNode
+
+immutable EmptyNode <: AbstractNode end
 
 immutable Node{T} <: AbstractNode
     fulltext
@@ -23,7 +25,33 @@ immutable Node{T} <: AbstractNode
     end
 end
 
-immutable EmptyNode <: AbstractNode end
+function Node(T, fulltext, start::Integer, _end::Integer)
+    Node{symbol(T)}(fulltext, start, _end, AbstractNode[], nothing)
+end
+
+function Node(T, fulltext, start::Integer, _end::Integer, children=AbstractNode[], match=nothing)
+    Node{symbol(T)}(fulltext, start, _end, children, match)
+end
+
+# Fully keywordized. Is it a good idea?
+function Node(;T="", fulltext="", start::Integer=0, _end::Integer=0, children=AbstractNode[], match=nothing)
+    Node{symbol(T)}(fulltext, start, _end, children, match)
+end
+
+# Partly keywordized. Is it a good idea?
+function Node(T, fulltext, start::Integer, _end::Integer; children=AbstractNode[], match=nothing)
+    Node{symbol(T)}(fulltext, start, _end, children, match)
+end
+
+# Copy
+function Node(T, n::Node)
+    Node(T, n.fulltext, n.start, n._end, n.children, n.match)
+end
+
+# Node() = EmptyNode() # won't do what you want
+function Node()
+    EmptyNode()
+end
 
 function show(io::IO, n::EmptyNode; indent=0)
     show(io, typeof(n))
@@ -69,27 +97,6 @@ if false
             print(io, "}")
         end
     end
-end
-
-# Here, I briefly wish I could have a union of two parametric types so I could
-# make a RegexNode{T} with the extra match field.
-
-function Node(T, fulltext, start::Integer, _end::Integer)
-    Node{symbol(T)}(fulltext, start, _end, AbstractNode[], nothing)
-end
-
-function Node(T, fulltext, start::Integer, _end::Integer, children=AbstractNode[], match=nothing)
-    Node{symbol(T)}(fulltext, start, _end, children, match)
-end
-
-# Copy
-function Node(T, n::Node)
-    Node(T, n.fulltext, n.start, n._end, n.children, n.match)
-end
-
-# Node() = EmptyNode() # won't do what you want
-function Node()
-    EmptyNode()
 end
 
 type VisitationError <:Exception
