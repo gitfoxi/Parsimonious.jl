@@ -14,7 +14,7 @@ import Expressions: Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, 
 using Nodes
 
 function len_eq(node, length)
-    node_length = node._end - node.start
+    node_length = node._end - node.start + 1
     if node_length != length
         println("node_length: ", node_length, " length", length)
     end
@@ -81,7 +81,7 @@ end
 #        """Test that leaf expressions like ``Literal`` make the right nodes."""
 h = Literal("hello", name="greeting")
 m = match(h, "hello")
-n = Node("greeting", "hello", 1, 6)
+n = Node("greeting", "hello", 1, 5)
 @show m
 @show n
 @test isequal(m, n)
@@ -92,37 +92,37 @@ n = Node("greeting", "hello", 1, 6)
 s = Sequence(Literal("heigh", name="greeting1"), Literal("ho", name="greeting2"), name="dwarf")
 text = "heighho"
 @show match(s, text)
-@show Node("dwarf", text, 1, 8, [Node("greeting1", text, 1, 6), Node("greeting2", text, 6, 8)])
-@test isequal(match(s, text), Node("dwarf", text, 1, 8, [Node("greeting1", text, 1, 6), Node("greeting2", text, 6, 8)]))
+@show Node("dwarf", text, 1, 7, [Node("greeting1", text, 1, 5), Node("greeting2", text, 6, 7)])
+@test isequal(match(s, text), Node("dwarf", text, 1, 7, [Node("greeting1", text, 1, 5), Node("greeting2", text, 6, 7)]))
 #
 # test_one_of
 #        """``OneOf`` should return its own node, wrapping the child that succeeds."""
 o = OneOf(Literal("a", name="lit"), name="one_of")
 text = "aa"
-@test isequal(match(o, text), Node("one_of", text, 1, 2, [Node("lit", text, 1, 2)]))
+@test isequal(match(o, text), Node("one_of", text, 1, 1, [Node("lit", text, 1, 1)]))
 #
 # test_optional
 #        """``Optional`` should return its own node wrapping the succeeded child."""
 expr = Optional(Literal("a", name="lit"), name="opt")
 text = "a"
-@test isequal(match(expr, text), Node("opt", text, 1, 2, [Node("lit", text, 1, 2)]))
+@test isequal(match(expr, text), Node("opt", text, 1, 1, [Node("lit", text, 1, 1)]))
 #
 #        # Test failure of the Literal inside the Optional; the
 #        # LengthTests.test_optional is ambiguous for that.
 text = ""
-@test isequal(match(expr, text), Node("opt", text, 1, 1))
+@test isequal(match(expr, text), Node("opt", text, 1, 0))
 #
 # test_zero_or_more_zero
 #        """Test the 0 case of ``ZeroOrMore``; it should still return a node."""
 expr = ZeroOrMore(Literal("a"), name="zero")
 text = ""
-@test isequal(match(expr, text), Node("zero", text, 1, 1))
+@test isequal(match(expr, text), Node("zero", text, 1, 0))
 #
 # test_one_or_more_one
 #        """Test the 1 case of ``OneOrMore``; it should return a node with a child."""
 expr = OneOrMore(Literal("a", name="lit"), name="one")
 text = "a"
-isequal(match(expr, text), Node("one", text, 1, 2, [Node("lit", text, 0, 1)]))
+isequal(match(expr, text), Node("one", text, 1, 1, [Node("lit", text, 1, 1)]))
 #
 #    # Things added since Grammar got implemented are covered in integration
 #    # tests in test_grammar.
@@ -139,7 +139,7 @@ isequal(match(expr, text), Node("one", text, 1, 2, [Node("lit", text, 0, 1)]))
 #        """
 expr = OneOrMore(Literal("a", name="lit"), name="more")
 text = "aa"
-isequal(parse(expr, text), Node("more", text, 0, 2, [Node("lit", text, 0, 1), Node("lit", text, 1, 2)]))
+isequal(parse(expr, text), Node("more", text, 1, 2, [Node("lit", text, 1, 1), Node("lit", text, 2, 2)]))
 #
 #
 #class ErrorReportingTests(TestCase):
