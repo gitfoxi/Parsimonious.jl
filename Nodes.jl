@@ -2,7 +2,7 @@
 module Nodes
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!
+export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child
 
 RegexMatchOrNothing = Union(RegexMatch, Nothing)
 
@@ -29,14 +29,13 @@ function show(io::IO, n::EmptyNode; indent=0)
     show(io, typeof(n))
 end
 
-
 function print(io::IO, n::Node)
     print(io, "<Node called '" * name(n) * "' matching '" * nodetext(n) *"'>")
 end
 
 function show(io::IO, n::Node)
     ret = {"s = $(repr(n.fulltext))"}
-    
+
     repr_children(n::EmptyNode; top_level=true) = string(typeof(n))
 # TODO: Handle the possiblity of match member here
     function repr_children(n::Node; top_level=true)
@@ -47,28 +46,33 @@ function show(io::IO, n::Node)
     show(io, join(ret, " ; "))
 end
 
-function show_old(io::IO, n::Node; indent=0)
-# Return a bit of code (though not an expression) that will recreate me.
-    print(io, "\n", repeat(".", indent))
-    print(io, typeof(n), "\"")
-    print(io, nodetext(n)[1:min(end,20)])
-    if length(nodetext(n)) > 100
-        print(io, "...", nodetext(n)[max(1,end-20):end])
-    end
-    print(io, "\"")
-    print(io, "(", n.start, ",", n._end, ")")
-    if length(n.children) > 0
-        print(io, "{")
-        for child in n.children
-            show(io, child, indent=indent+1)
-            print(io, ",")
+# This used to be my show function and I like it but
+# ditching it to match Parsimonious more closely so I can
+# pass his tests
+if false
+    function show_old(io::IO, n::Node; indent=0)
+    # Return a bit of code (though not an expression) that will recreate me.
+        print(io, "\n", repeat(".", indent))
+        print(io, typeof(n), "\"")
+        print(io, nodetext(n)[1:min(end,20)])
+        if length(nodetext(n)) > 100
+            print(io, "...", nodetext(n)[max(1,end-20):end])
         end
-        print(io, "}")
+        print(io, "\"")
+        print(io, "(", n.start, ",", n._end, ")")
+        if length(n.children) > 0
+            print(io, "{")
+            for child in n.children
+                show(io, child, indent=indent+1)
+                print(io, ",")
+            end
+            print(io, "}")
+        end
     end
 end
 
 # Here, I briefly wish I could have a union of two parametric types so I could
-# make a RegexNode{T} with the extra match field
+# make a RegexNode{T} with the extra match field.
 
 function Node(T, fulltext, start::Integer, _end::Integer)
     Node{symbol(T)}(fulltext, start, _end, AbstractNode[], nothing)
@@ -83,6 +87,7 @@ function Node(T, n::Node)
     Node(T, n.fulltext, n.start, n._end, n.children, n.match)
 end
 
+# Node() = EmptyNode() # won't do what you want
 function Node()
     EmptyNode()
 end
@@ -127,19 +132,19 @@ end
 # TODO: _end is the index of the last character in the end of the match.
 # It used to be the character after that but I'm refactoring so lots to change.
 function nodetext(n::Node)
-# TODO: not sure escape goes here or elsewhere
+# TODO: not sure escape goes here or elsewhere or anywhere
     escape_string(n.fulltext[n.start:n._end])
 end
 
 isempty(::Node) = false
 isempty(::EmptyNode) = true
-isequal(::EmptyNode, ::EmptyNode) = true
 
 function isequal(a::Node, b::Node)
     # Can I make the type system do this?
     typeof(a) == typeof(b) || return false
     length(a) == length(b) || return false
-    isequal(a.fulltext, b.fulltext) && a.start == b.start && a._end == b._end || return false
+    is(a.fulltext, b.fulltext) || isequal(a.fulltext, b.fulltext) || return false
+    a.start == b.start && a._end == b._end || return false
     for i in 1:length(a)
         isequal(a.children[i], b.children[i]) || return false
     end
@@ -154,6 +159,7 @@ function indent(s,indstr="| ")
     return join([indstr * line for line in split(s, '\n')], "\n")
 end
 
+# Make an error string if the testnode is the errnode
 function errstring(testnode, errnode)
     errnode === testnode ? " <-- *** Error here ***" : ""
 end
@@ -167,7 +173,7 @@ function escape_newline(s)
 end
 
 function prettily{T}(node::Node{T}, err::AbstractNode=Node())
-    ret = ["<$(T) matching '$(escape_newline(nodetext(node)))'>$(errstring(node, err))"]
+    ret = ["<$(T) matching '$(nodetext(node))'>$(errstring(node, err))"]
     for child in node
         push!(ret, indent(prettily(child, err)))
     end
@@ -206,13 +212,14 @@ function visit{T}(v::NodeVisitor, node::Node{T})
     end
 end
 
-# generic_visit -- not implemented in base class
+# generic_visit -- not implemented in base class as it were
 function visit{T}(v::NodeVisitor, n::Node{T}, visited_children)
     error("Go implement visit(::$(typeof(v)), ::Node{$(T)})) right now!")
 end
 
-function lift_child(v::NodeVisitor, n::Node, child)
-    return child
+# conveniently replace a node with its own visited_children
+function lift_child(v::NodeVisitor, n::Node, visited_children)
+    return visited_children
 end
 
 end
