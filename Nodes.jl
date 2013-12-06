@@ -154,6 +154,7 @@ function isequal(a::Node, b::Node)
     length(a) == length(b) || return false
     is(a.fulltext, b.fulltext) || isequal(a.fulltext, b.fulltext) || return false
     a.start == b.start && a._end == b._end || return false
+    a.match == b.match || return false
     for i in 1:length(a)
         isequal(a.children[i], b.children[i]) || return false
     end
@@ -220,6 +221,8 @@ function visit{T}(v::NodeVisitor, node::Node{T})
         end
     end
 end
+
+# TODO: visit{T}(v::NodeVisitor, n::Node{T}  # here from Grammars.jl
 
 # generic_visit -- not implemented in base class as it were
 function visit{T}(v::NodeVisitor, n::Node{T}, visited_children)
