@@ -1,11 +1,9 @@
 
 module Expressions
 
-export Regex
-
 import Base: match, rsearch, length, showerror, isequal
 using Nodes
-export IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal
+export unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal
 
 abstract Expression # -ism
 abstract ParseException
@@ -127,7 +125,10 @@ function _uncached_match(regex::Regex, text::ASCIIString, pos::Int64, cache::Dic
         return EmptyNode()
     end
     assert(m.offset == 1)  # should only match start of text
-    Node(regex.name, text, pos, pos - 1 + length(m.match), match=m)
+    println("REGEX MATCHED ", regex.re.pattern, " MATCH ", m.match, "NAME", regex.name, "LENGTH", length(m.match))
+    n = Node(regex.name, text, pos, pos - 1 + length(m.match), match=m)
+    @show nodetext(n)
+    n
 end
 
 function _as_rhs(regex::Regex)
@@ -349,8 +350,29 @@ function _uncached_match(self::OneOrMore, text::ASCIIString, pos::Int64, cache::
     return EmptyNode()
 end
 
+type LazyReference <: Expression name end
+
+_as_rhs(lr::LazyReference) = "<LazyReference to $(lr.name)>"
+
+unicode(lr::LazyReference) = lr.name
+
 function _as_rhs(e::Optional)
     join(e.members, " ") * "+"
+end
+
+function as_rule(expr::Expression)
+    if expr.name == ""
+        return _as_rhs(expr)
+    end
+
+    "$(expr.name) = $(_as_rhs(expr))"
+end
+
+function unicode(expr::Expression)
+    class = string(typeof(expr))
+    rulestr = as_rule(expr)
+    id = hex(object_id(expr))
+    "<$(class) $(rulestr) at 0x$(id)>"
 end
 
 end

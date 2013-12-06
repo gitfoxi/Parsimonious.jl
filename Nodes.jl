@@ -11,13 +11,13 @@ abstract AbstractNode
 immutable EmptyNode <: AbstractNode end
 
 immutable Node{T} <: AbstractNode
-    fulltext
-    start
-    _end
+    fulltext::String
+    start::Integer
+    _end::Integer
     children
-    match
+    match::RegexMatchOrNothing
 
-    function Node(fulltext, start::Integer, _end::Integer, children, match)
+    function Node(fulltext::String, start::Integer, _end::Integer, children, match)
         @assert start > 0
         @assert _end <= length(fulltext)
         # _end < start is OK and indicates an empty match string
@@ -25,27 +25,25 @@ immutable Node{T} <: AbstractNode
     end
 end
 
-function Node(T, fulltext, start::Integer, _end::Integer)
-    Node{symbol(T)}(fulltext, start, _end, AbstractNode[], nothing)
-end
-
-function Node(T, fulltext, start::Integer, _end::Integer, children=AbstractNode[], match=nothing)
+function Node(T, fulltext::String, start::Integer, _end::Integer, children=AbstractNode[], match=nothing)
     Node{symbol(T)}(fulltext, start, _end, children, match)
 end
 
 # Fully keywordized. Is it a good idea?
-function Node(;T="", fulltext="", start::Integer=0, _end::Integer=0, children=AbstractNode[], match=nothing)
+function Node(;T="", fulltext::String="", start::Integer=0, _end::Integer=0, children=AbstractNode[], match=nothing)
     Node{symbol(T)}(fulltext, start, _end, children, match)
 end
 
 # Partly keywordized. Is it a good idea?
-function Node(T, fulltext, start::Integer, _end::Integer; children=AbstractNode[], match=nothing)
+function Node(T, fulltext::String, start::Integer, _end::Integer; children=AbstractNode[], match=nothing)
     Node{symbol(T)}(fulltext, start, _end, children, match)
 end
 
-# Copy
+# Copy with new name
 function Node(T, n::Node)
-    Node(T, n.fulltext, n.start, n._end, n.children, n.match)
+    m = Node(T, n.fulltext, n.start, n._end, n.children, n.match)
+    println("COPIED", n, "TO", n)
+    m
 end
 
 # Node() = EmptyNode() # won't do what you want

@@ -10,6 +10,7 @@ reload("Grammars.jl")
 using Base.Test
 using Base.typeof
 import Grammars.Grammar
+import Grammars
 # import Expressions: Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, Expression, parse
 using Nodes
 using Expressions
@@ -153,12 +154,17 @@ isequal(parse(expr, text), Node("more", text, 1, 2, [Node("lit", text, 1, 1), No
 #        """
 
 # TODO: use this when Grammar is working
-#grammar = Grammar("
-#            bold_text = open_parens text close_parens
-#            open_parens = '(('
-#            text = ~'[a-zA-Z]+'
-#            close_parens = '))'
-#            ")
+
+#for g in [Grammars.boot_grammar()]  # rule_grammar -- when working
+g = Grammars.boot_grammar()
+    grammar = Grammar(g, "
+                bold_text = open_parens text close_parens
+                open_parens = '(('
+                text = ~'[a-zA-Z]+'
+                close_parens = '))'
+                ")
+#end
+
 #text = "((fred!!"
 #parse(grammar, text)
 #try
