@@ -8,13 +8,12 @@ reload("Expressions.jl")
 reload("Grammars.jl")
 
 using Base.Test
-using Base.typeof
-# TODO: using Grammars, no import
-import Grammars.Grammar
-import Grammars
+# using Base.typeof
 using Nodes
 using Expressions
 using Grammars
+
+import Expressions.parse
 
 type TestExpression <: Expression
     name

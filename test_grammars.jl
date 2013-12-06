@@ -2,7 +2,7 @@
 
 using Base.Test
 
-using Grammars: rule_grammar, RuleVisitor, Grammar
+using Grammars
 
 # BootstrappingGrammarTests
 #Tests for the expressions in the grammar that parses the grammar

@@ -1,13 +1,12 @@
 
 module Grammars
 
-export Grammar, lookup
 
-# TODO: using Expressions
-import Expressions: LazyReference, unicode, Literal, Regex, Sequence, OneOf, Lookahead, Optional, ZeroOrMore, OneOrMore, Not, Expression, parse
+using Nodes
 using Expressions
-# NodeVisitor is abstract and it tells me I can't import it
-import Nodes: Node, NodeVisitor, pprettily, nodetext, name, lift_child
+export Grammar, lookup, rule_grammar, parse
+
+import Expressions.parse
 
 type Grammar
     rules::ASCIIString
