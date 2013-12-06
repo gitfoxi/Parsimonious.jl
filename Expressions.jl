@@ -23,7 +23,14 @@ type IncompleteParseError <: ParseException
 end
 
 function showerror(io::IO, e::ParseError)
-    print(io, escape_string("Rule $(e.expr.name) didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e))).'"))
+    print(io, escape_string("Rule '$(e.expr.name)' didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e)))."))
+end
+
+function unicode(e::ParseException)
+    io = IOString()
+    showerror(io, e)
+    seekstart(io)
+    readline(io)
 end
 
 function showerror(io::IO, e::IncompleteParseError)
@@ -51,19 +58,27 @@ function match(expr::Expression, text::ASCIIString, pos::Int64=1)
     node
 end
 
+function hasfield(t, field)
+    try
+        getfield(t, field)
+    catch
+        return false
+    end
+    true
+end
+
 function _match!(expr::Expression, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     expr_id = object_id(expr)
     key = (expr_id, pos)
-    if haskey(cache, key)
-        node = cache[key]
-    else
-        node = _uncached_match(expr, text, pos, cache, err)
+    if !haskey(cache, key)
+        node = cache[key] = _uncached_match(expr, text, pos, cache, err)
         cache[key] = node
+    else
+        node = cache[key]
     end
 
     if isempty(node) && pos >= err.pos && (
-        Base.isempty(expr.name) || Base.isempty(err.expr.name))
-        # TODO: ParseError?
+        !isempty(expr.name) || !hasfield(err.expr, :name))
         err.expr = expr
         err.pos = pos
     end

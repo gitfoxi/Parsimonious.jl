@@ -1,7 +1,7 @@
 
 module Grammars
 
-export Grammar
+export Grammar, lookup
 
 # TODO: using Expressions
 import Expressions: LazyReference, unicode, Literal, Regex, Sequence, OneOf, Lookahead, Optional, ZeroOrMore, OneOrMore, Not, Expression, parse
@@ -14,6 +14,11 @@ type Grammar
     default_rule::Expression
     exprs::Dict
 end
+
+# TODO: Grammar <: Associative
+# for now, a lookup method
+
+lookup(g::Grammar, key) = g.exprs[key]
 
 function Grammar(rule_grammar::Grammar, rule_syntax::ASCIIString; default_rule=nothing)
     exprs, first_rule = _expressions_from_rules(rule_grammar, rule_syntax)
@@ -54,7 +59,8 @@ rule_syntax = """
     literal = spaceless_literal _
 
     # So you can't spell a regex like `~'...' ilm`:
-    spaceless_literal = ~'u?r?\\'[^\\'\\\\\\\\]*(?:\\\\\\\\.[^\\'\\\\\\\\]*)*\\''is / ~'u?r?"[^"\\\\\\\\]*(?:\\\\\\\\.[^"\\\\\\\\]*)*"'is
+    spaceless_literal = ~'\\'[^\\'\\\\\\\\]*(?:\\\\\\\\.[^\\'\\\\\\\\]*)*\\''is /
+                        ~'"[^"\\\\\\\\]*(?:\\\\\\\\.[^"\\\\\\\\]*)*"'is
 
     expression = ored / sequence / term
     or_term = '/' _ term
@@ -78,8 +84,8 @@ rule_syntax = """
 
     # _ = ~r'\\s*(?:#[^\\r\\n]*)?\\s*'
     _ = meaninglessness*
-    meaninglessness = ~r'\\s+' / comment
-    comment = ~r'#[^\\r\\n]*'
+    meaninglessness = ~'\\s+' / comment
+    comment = ~'#[^\\r\\n]*'
 """
 
 function boot_grammar()
@@ -92,7 +98,7 @@ function boot_grammar()
     label = Sequence(Regex("[a-zA-Z_][a-zA-Z_0-9]*"), _, name="label")
     reference = Sequence(label, Not(equals), name="reference")
     quantifier = Sequence(Regex("[*+?]"), _, name="quantifier")
-    spaceless_literal = Regex("u?r?'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'",
+    spaceless_literal = Regex("'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'",
         options="is",
         name="spaceless_literal")
     literal = Sequence(spaceless_literal, _, name="literal")
@@ -159,7 +165,7 @@ function _expressions_from_rules(rule_syntax::ASCIIString)
     label = Sequence(Regex("[a-zA-Z_][a-zA-Z_0-9]*"), _, name="label")
     reference = Sequence(label, Not(equals), name="reference")
     quantifier = Sequence(Regex("[*+?]"), _, name="quantifier")
-    spaceless_literal = Regex("u?r?'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'",
+    spaceless_literal = Regex("'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'",
         options="is",
         name="spaceless_literal")
     literal = Sequence(spaceless_literal, _, name="literal")
@@ -173,7 +179,7 @@ function _expressions_from_rules(rule_syntax::ASCIIString)
 
     term = OneOf(quantified, atom, name="term")
     not_term = Sequence(Literal("!"), term, _, name="not_term")
-    unshift!(term.members, not_term)
+    term = OneOf(not_term, quantified, atom, name="term")
 
     sequence = Sequence(term, OneOrMore(term), name="sequence")
     or_term = Sequence(Literal("/"), _, term, name="or_term")
@@ -384,7 +390,8 @@ end
 # TODO: Need a function for escaping \n, \t etc
 # TODO: unicode
 function visit(v::RuleVisitor, n::Node{:spaceless_literal}, visited_children)
-    Literal(escape_string(nodetext(n)))
+    # strip the single quotes
+    Literal(escape_string(nodetext(n)[2:end-1]))
 end
 
 #rule_grammar = Grammar()  # Bootstrapping

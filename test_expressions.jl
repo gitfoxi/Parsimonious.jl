@@ -9,11 +9,13 @@ reload("Grammars.jl")
 
 using Base.Test
 using Base.typeof
+# TODO: using Grammars, no import
 import Grammars.Grammar
 import Grammars
 # import Expressions: Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, Expression, parse
 using Nodes
 using Expressions
+using Grammars
 
 function len_eq(node, length)
     node_length = node._end - node.start + 1
@@ -155,7 +157,7 @@ isequal(parse(expr, text), Node("more", text, 1, 2, [Node("lit", text, 1, 1), No
 
 # TODO: use this when Grammar is working
 
-#for g in [Grammars.boot_grammar()]  # rule_grammar -- when working
+for g in [Grammars.boot_grammar(), Grammar()]  # rule_grammar -- when working
 g = Grammars.boot_grammar()
     grammar = Grammar(g, "
                 bold_text = open_parens text close_parens
@@ -163,18 +165,18 @@ g = Grammars.boot_grammar()
                 text = ~'[a-zA-Z]+'
                 close_parens = '))'
                 ")
-#end
 
-#text = "((fred!!"
-#parse(grammar, text)
-#try
-#    parse(grammar, text)
-#catch e
-#    isequal(e.pos, 6)
-#    isequal(e.expr, grammar["close_parens"])
-#    isequal(e.text, text)
-##    isequal(unicode(e), u"Rule "close_parens" didn"t match at "!!" (line 1, column 7).")
-#end
+    text = "((fred))"
+    parse(grammar, text)
+    text = "((fred!!"
+    try
+        parse(grammar, text)
+    catch e
+        @test e.pos == 7
+        @test e.expr == lookup(grammar, "close_parens")
+        @test e.text == text
+        @test unicode(e) == "Rule 'close_parens' didn't match at '!!' (line 1, column 7)."
+    end
 
 #
 #    def test_rewinding(self):
@@ -186,34 +188,40 @@ g = Grammars.boot_grammar()
 #        more real-world example than the no-alternative cases already tested.
 #
 #        """
-#        grammar = Grammar("""
-#            formatted_text = bold_text / weird_text
-#            bold_text = open_parens text close_parens
-#            weird_text = open_parens text "!!" bork
-#            bork = "bork"
-#            open_parens = "(("
-#            text = ~"[a-zA-Z]+"
-#            close_parens = "))"
-#            """)
-#        text = "((fred!!"
-#        try:
-#            grammar.parse(text)
-#        except ParseError as error:
-#            eq_(error.pos, 8)
-#            eq_(error.expr, grammar["bork"])
-#            eq_(error.text, text)
+    grammar = Grammar(g, """
+        formatted_text = bold_text / weird_text
+        bold_text = open_parens text close_parens
+        weird_text = open_parens text '!!' bork
+        bork = 'bork'
+        open_parens = '(('
+        text = ~'[a-zA-Z]+'
+        close_parens = '))'
+        """)
+
+    text = "((fred))"
+    parse(grammar, text)
+    text = "((fred!!"
+    try
+        parse(grammar, text)
+    catch error
+        @test error.pos == 9
+        @test error.expr == lookup(grammar, "bork")
+        @test error.text == text
+    end
 #
 #    def test_no_named_rule_succeeding(self):
 #        """Make sure ParseErrors have sane printable representations even if we
 #        never succeeded in matching any named expressions."""
-#        grammar = Grammar("""bork = "bork"""")
-#        try:
-#            grammar.parse("snork")
-#        except ParseError as error:
-#            eq_(error.pos, 0)
-#            eq_(error.expr, grammar["bork"])
-#            eq_(error.text, "snork")
-#
+    grammar = Grammar(g, "bork = 'bork'")
+    try
+        parse(grammar, "snork")
+    catch error
+        @test error.pos == 1
+        @test error.expr == lookup(grammar, "bork")
+        @test error.text == "snork"
+    end
+end
+
 #    def test_parse_with_leftovers(self):
 #        """Make sure ``parse()`` reports where we started failing to match,
 #        even if a partial match was successful."""
@@ -280,7 +288,7 @@ myf = ParseError("foo\nfoo\n", TestExpression("tst"), 1)
 myio = IOString()
 showerror(myio, myf)
 seekstart(myio)
-@test readline(myio) == "Rule tst didn't match at 'foo\\nfoo\\n' (line 1, column 1).'"
+@test readline(myio) == "Rule 'tst' didn't match at 'foo\\nfoo\\n' (line 1, column 1)."
 
 # Test
 
