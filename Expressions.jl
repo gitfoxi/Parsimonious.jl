@@ -3,7 +3,7 @@ module Expressions
 
 import Base: match, rsearch, length, showerror, isequal
 using Nodes
-export unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal
+export unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal, @p_str, @p_mstr
 
 abstract Expression # -ism
 abstract ParseException
@@ -132,7 +132,15 @@ type Regex <: Expression
     end
 end
 
-Regex(pattern; name="", options="") = Regex(pattern, name, options)
+Regex(pattern::ASCIIString; name="", options="") = Regex(pattern, name, options)
+
+# This is really something magical. Say you want an unescaped string, just say:
+#    s = p"\'"
+# And you will have a 2 character string where the characters are '\' and '''.
+# How does the macro do it? I don't know. Thanks `regex.jl`
+
+macro p_str(s) s end
+macro p_mstr(s) s end
 
 function _uncached_match(regex::Regex, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
     m = match(regex.re, text[pos:])
@@ -168,11 +176,28 @@ Sequence(members::Expression...; name::String="") = Sequence(name, members...)
 
 function isequal(a::Expression, b::Expression)
     typeof(a) == typeof(b) || return false
+
     for field in names(a)
-        getfield(a, field) == getfield(b, field) || return false
+# special handling for the re field
+        if field == :re
+            a.re.pattern == b.re.pattern || return false
+        else
+            getfield(a, field) == getfield(b, field) || return false
+        end
     end
     true
 end
+
+using Base.Test
+function Regex(pattern::Base.Regex; name="", options="")
+# If someone uses a regex string, unpack it and use it anyway
+    Regex(pattern.pattern, name, options)
+end
+
+@show Regex(r"asdf") , Regex("asdf")
+@show isequal(Regex(r"asdf") , Regex("asdf"))
+@test isequal(Regex(r"asdf") , Regex("asdf"))
+
 
 # TODO: Why can't isequal just work for any two same-type objects?
 # TODO: ask julia-users
