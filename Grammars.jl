@@ -20,7 +20,10 @@ end
 
 lookup(g::Grammar, key) = g.exprs[key]
 
-function Grammar(rule_grammar::Grammar, rule_syntax::ASCIIString; default_rule=nothing)
+# As an interface, calling with similar parameters in a different order could
+# not be more fucking confusing. TODO: sort it out
+function Grammar(rule_grammar::Grammar, rule_syntax::ASCIIString;
+    default_rule=nothing)
     exprs, first_rule = _expressions_from_rules(rule_grammar, rule_syntax)
     default_rule = is(default_rule,nothing) ? first_rule : exprs[default_rule]
     Grammar(rule_syntax, default_rule, exprs)
@@ -39,8 +42,6 @@ function _expressions_from_rules(grammar::Grammar, rules::ASCIIString)
     tree = parse(grammar, rules)
     exprs, first_rule = visit(RuleVisitor(), tree)
 
-    @show exprs, first_rule
-    @show first_rule
     exprs, first_rule
 end
 
@@ -59,8 +60,8 @@ rule_syntax = """
     literal = spaceless_literal _
 
     # So you can't spell a regex like `~'...' ilm`:
-    spaceless_literal = ~'\\'[^\\'\\\\\\\\]*(?:\\\\\\\\.[^\\'\\\\\\\\]*)*\\''is /
-                        ~'"[^"\\\\\\\\]*(?:\\\\\\\\.[^"\\\\\\\\]*)*"'is
+    spaceless_literal = ~'\\'[^\\'\\\\]*(?:\\\\.[^\\'\\\\]*)*\\''is /
+                        ~'"[^"\\\\]*(?:\\\\.[^"\\\\]*)*"'is
 
     expression = ored / sequence / term
     or_term = '/' _ term
@@ -88,7 +89,7 @@ rule_syntax = """
     comment = ~'#[^\\r\\n]*'
 """
 
-function boot_grammar()
+function boot_expressions()
     # Return a stripped-down rules which may be used to parse
     # rule_syntax to generate the complete rule_grammar
     comment = Regex("#[^\\r\\n]*", name="comment")
@@ -153,43 +154,19 @@ function boot_grammar()
         "rule" => rule,
         "rules" => rules
         }
+end
 
+function boot_grammar()
+    exprs = boot_expressions()
     Grammar("", exprs["rules"], exprs)
 end
 
 function _expressions_from_rules(rule_syntax::ASCIIString)
-    comment = Regex("#[^\\r\\n]*", name="comment")
-    meaninglessness = OneOf(Regex("\\s+"), comment, name="meaninglessness")
-    _ = ZeroOrMore(meaninglessness, name="_")
-    equals = Sequence(Literal("="), _, name="equals")
-    label = Sequence(Regex("[a-zA-Z_][a-zA-Z_0-9]*"), _, name="label")
-    reference = Sequence(label, Not(equals), name="reference")
-    quantifier = Sequence(Regex("[*+?]"), _, name="quantifier")
-    spaceless_literal = Regex("'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'",
-        options="is",
-        name="spaceless_literal")
-    literal = Sequence(spaceless_literal, _, name="literal")
-    regex = Sequence(Literal("~"),
-                     literal,
-                     Regex("[ilmsux]*", options="i"),
-                     _,
-                     name="regex")
-    atom = OneOf(reference, literal, regex, name="atom")
-    quantified = Sequence(atom, quantifier, name="quantified")
-
-    term = OneOf(quantified, atom, name="term")
-    not_term = Sequence(Literal("!"), term, _, name="not_term")
-    term = OneOf(not_term, quantified, atom, name="term")
-
-    sequence = Sequence(term, OneOrMore(term), name="sequence")
-    or_term = Sequence(Literal("/"), _, term, name="or_term")
-    ored = Sequence(term, OneOrMore(or_term), name="ored")
-    expression = OneOf(ored, sequence, term, name="expression")
-    rule = Sequence(label, equals, expression, name="rule")
-    rules = Sequence(_, OneOrMore(rule), name="rules")
+    rules = boot_expressions()["rules"]
 
     # Turn the parse tree into a map of expressions:
     rule_tree = parse(rules, rule_syntax)
+    pprettily(rule_tree)
     exprs, default_rule = visit(RuleVisitor(), rule_tree)
     return exprs, default_rule
 end
@@ -318,7 +295,6 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
         @assert 0
     end
     if !isempty(exprname) && !in(exprname, unwalked_names)
-        println("NOT WALKING")
         # unwalked_names started out with all the rule names in it, so, if
         # this is a named expr and it isn't in there, it must have been
         # resolved.
@@ -336,7 +312,6 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
                 if isa(e, KeyError)
                     # TODO: UndefinedLabel type
                     # throw(UndefinedLabel(expr))
-                    @show rule_map
                     error("Undefined Label ", expr)
                 end
                 rethrow(e)
@@ -354,8 +329,6 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
         members = []
         try
             members = getfield(expr, :members)
-        catch
-            println("no members")
         end
         if !isempty(members)
             expr.members = [_resolve_refs(rule_map, m, unwalked_names, walking_names) for m in members]

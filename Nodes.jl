@@ -2,7 +2,7 @@
 module Nodes
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
+export pprettily, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
 
 RegexMatchOrNothing = Union(RegexMatch, Nothing)
 

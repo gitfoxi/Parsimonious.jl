@@ -140,10 +140,7 @@ function _uncached_match(regex::Regex, text::ASCIIString, pos::Int64, cache::Dic
         return EmptyNode()
     end
     assert(m.offset == 1)  # should only match start of text
-    println("REGEX MATCHED ", regex.re.pattern, " MATCH ", m.match, "NAME", regex.name, "LENGTH", length(m.match))
-    n = Node(regex.name, text, pos, pos - 1 + length(m.match), match=m)
-    @show nodetext(n)
-    n
+    Node(regex.name, text, pos, pos - 1 + length(m.match), match=m)
 end
 
 function _as_rhs(regex::Regex)

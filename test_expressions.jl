@@ -12,10 +12,25 @@ using Base.typeof
 # TODO: using Grammars, no import
 import Grammars.Grammar
 import Grammars
-# import Expressions: Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, Expression, parse
 using Nodes
 using Expressions
 using Grammars
+
+type TestExpression <: Expression
+    name
+end
+
+# Tricky to get spaceless_literal to match itself in bootstrap
+
+spaceless_literal = Grammars.boot_expressions()["spaceless_literal"]
+parse(spaceless_literal, """'\\'[^\\'\\\\]*(?:\\\\.[^\\'\\\\]*)*\\''""")
+#                        ~'"[^"\\\\]*(?:\\\\.[^"\\\\]*)*"'is
+
+# Try examples that will work on both Boot Grammar and Rule Grammar on both
+boot_gr, rule_gr = Grammars.boot_grammar(), Grammar()
+
+# function wrap so I can time running independent of compilation
+# function go()
 
 function len_eq(node, length)
     node_length = node._end - node.start + 1
@@ -157,7 +172,7 @@ isequal(parse(expr, text), Node("more", text, 1, 2, [Node("lit", text, 1, 1), No
 
 # TODO: use this when Grammar is working
 
-for g in [Grammars.boot_grammar(), Grammar()]  # rule_grammar -- when working
+for g in [boot_gr, rule_gr]
 g = Grammars.boot_grammar()
     grammar = Grammar(g, "
                 bold_text = open_parens text close_parens
@@ -220,27 +235,37 @@ g = Grammars.boot_grammar()
         @test error.expr == lookup(grammar, "bork")
         @test error.text == "snork"
     end
-end
+end  # for g in ...
 
 #    def test_parse_with_leftovers(self):
 #        """Make sure ``parse()`` reports where we started failing to match,
 #        even if a partial match was successful."""
-#        grammar = Grammar(r"""sequence = "chitty" (" " "bang")+""")
-#        try:
-#            grammar.parse("chitty bangbang")
-#        except IncompleteParseError as error:
-#            eq_(unicode(error), u"Rule "sequence" matched in its entirety, but it didn"t consume all the text. The non-matching portion of the text begins with "bang" (line 1, column 12).")
-#
+
+# TODO: crap, this one won't compile -- first time using parenthesis
+# ERROR: Rule 'equals' didn't match at ' = 'chitty' (' ' 'ban' (line 1, column 9).
+grammar = Grammar(rule_gr, """sequence = 'chitty' (' ' 'bang')+""")
+try
+    parse(grammar, "chitty bangbang")
+catch error
+    @show unicode(error)
+    @test unicode(error) == "Rule 'sequence' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with 'bang' (line 1, column 13)."
+end
+
+
 #    def test_favoring_named_rules(self):
 #        """Named rules should be used in error messages in favor of anonymous
 #        ones, even if those are rightward-progressing-more, and even if the
 #        failure starts at position 0."""
-#        grammar = Grammar(r"""starts_with_a = &"a" ~"[a-z]+"""")
-#        try:
-#            grammar.parse("burp")
-#        except ParseError as error:
-#            eq_(unicode(error), u"Rule "starts_with_a" didn"t match at "burp" (line 1, column 1).")
-#
+
+# TODO: Another fail. Something very wrong.
+#grammar = Grammar(rule_gr, """starts_with_a = &'a' ~'[a-z]+'""")
+#try
+#    parse(grammar, "burp")
+#catch error
+#    @show unicode(error)
+#    @test unicode(error) == "Rule 'starts_with_a' didn't match at 'burp' (line 1, column 1)."
+#end
+
 #    def test_line_and_column(self):
 #        """Make sure we got the line and column computation right."""
 #        grammar = Grammar(r"""
@@ -273,9 +298,6 @@ end
 #        """
 #        unicode(rule_grammar)
 
-type TestExpression <: Expression
-    name
-end
 mye = ParseError("foo\nfoo\n", TestExpression("tst"), 5)
 @test Expressions.line(mye) == 2
 @test Expressions.column(mye) == 1
@@ -331,5 +353,8 @@ end
 @test_throws parse(OneOrMore(Literal("bar")), "bas")
 te = TestExpression("tst")
 @test Sequence("", te, te) == Sequence(te, te, name="") == Sequence(te, te)
+
+# end  # function go()
+# go()
 
 end
