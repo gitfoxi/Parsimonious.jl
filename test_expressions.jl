@@ -14,19 +14,44 @@ using Expressions
 using Grammars
 
 import Expressions.parse
+import Expressions.show
+
 
 type TestExpression <: Expression
     name
 end
 
-# Tricky to get spaceless_literal to match itself in bootstrap
-
-spaceless_literal = Grammars.boot_expressions()["spaceless_literal"]
-parse(spaceless_literal, """'\\'[^\\'\\\\]*(?:\\\\.[^\\'\\\\]*)*\\''""")
-#                        ~'"[^"\\\\]*(?:\\\\.[^"\\\\]*)*"'is
-
+function show(io::IO, expr::Expression)
+    function reshow(io::IO, expr::Expression, stack::Set)
+        println("."^length(stack), typeof(expr), '"', expr.name, '"', ": ")
+        for field in names(expr)
+# Todo: sort fields and members in alphabetical order for easier comparison
+            if(field == :name)
+# already taken care of
+            elseif(field == :members)
+                push!(stack, expr.name)
+                for m in expr.members
+                    if in(m.name, stack)
+                        println(io, "."^length(stack), "recursive " * expr.name * " ...")
+                    else
+                        reshow(io, m, stack)
+                    end
+                end
+                pop!(stack, expr.name)
+            else
+                println(io, "."^length(stack), ' ', string(field), '(', getfield(expr, field), ')')
+            end
+        end
+    end
+    reshow(io, expr, Set())
+end
+            
 # Try examples that will work on both Boot Grammar and Rule Grammar on both
 boot_gr, rule_gr = Grammars.boot_grammar(), Grammar()
+# TODO: a way to print recursive trees without infinite loop fun
+println(boot_gr.default_rule)  # print boot_gr also for infinite loop
+# println(rule_gr)  # print rule_gr for infinite loop in term / not_term
+rule_gr_gr = parse(lookup(rule_gr, "rules"), Grammars.rule_syntax)
 
 # function wrap so I can time running independent of compilation
 # function go()

@@ -49,56 +49,56 @@ function Grammar() # Bootstrapping
     Grammar(rule_syntax, default_rule, exprs)
 end
 
-rule_syntax = """
+rule_syntax = p"""
     # Ignored things (represented by _) are typically hung off the end of the
-    # leafmost kinds of nodes. Literals like '/' count as leaves.
+    # leafmost kinds of nodes. Literals like "/" count as leaves.
 
     rules = _ rule+
     rule = label equals expression
-    equals = '=' _
+    equals = "=" _
     literal = spaceless_literal _
 
-    # So you can't spell a regex like `~'...' ilm`:
-    spaceless_literal = ~'\\'[^\\'\\\\]*(?:\\\\.[^\\'\\\\]*)*\\''is /
-                        ~'"[^"\\\\]*(?:\\\\.[^"\\\\]*)*"'is
-
+    # So you can't spell a regex like `~"..." ilm`:
+    """ * """
+    spaceless_literal = ~"u?r?\\"[^\\"\\\\]*(?:\\\\.[^\\"\\\\]*)*\\""is /
+                        ~"u?r?'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'"is
+    """ * p"""
     expression = ored / sequence / term
-    or_term = '/' _ term
+    or_term = "/" _ term
     ored = term or_term+
     sequence = term term+
-    not_term = '!' term _
-    lookahead_term = '&' term _
+    not_term = "!" term _
+    lookahead_term = "&" term _
     term = not_term / lookahead_term / quantified / atom
     quantified = atom quantifier
     atom = reference / literal / regex / parenthesized
-    regex = '~' spaceless_literal ~'[ilmsux]*'i _
-    parenthesized = '(' _ expression ')' _
-    quantifier = ~'[*+?]' _
-
+    regex = "~" spaceless_literal ~"[ilmsux]*"i _
+    parenthesized = "(" _ expression ")" _
+    quantifier = ~"[*+?]" _
     reference = label !equals
 
     # A subsequent equal sign is the only thing that distinguishes a label
     # (which begins a new rule) from a reference (which is just a pointer to a
     # rule defined somewhere else):
-    label = ~'[a-zA-Z_][a-zA-Z_0-9]*' _
+    label = ~"[a-zA-Z_][a-zA-Z_0-9]*" _
 
-    # _ = ~r'\\s*(?:#[^\\r\\n]*)?\\s*'
+    # _ = ~r"\s*(?:#[^\r\n]*)?\s*"
     _ = meaninglessness*
-    meaninglessness = ~'\\s+' / comment
-    comment = ~'#[^\\r\\n]*'
+    meaninglessness = ~r"\s+" / comment
+    comment = ~r"#[^\r\n]*"
 """
 
 function boot_expressions()
     # Return a stripped-down rules which may be used to parse
     # rule_syntax to generate the complete rule_grammar
-    comment = Regex("#[^\\r\\n]*", name="comment")
-    meaninglessness = OneOf(Regex("\\s+"), comment, name="meaninglessness")
+    comment = Regex(p"#[^\r\n]*", name="comment")
+    meaninglessness = OneOf(Regex(p"\s+"), comment, name="meaninglessness")
     _ = ZeroOrMore(meaninglessness, name="_")
     equals = Sequence(Literal("="), _, name="equals")
     label = Sequence(Regex("[a-zA-Z_][a-zA-Z_0-9]*"), _, name="label")
     reference = Sequence(label, Not(equals), name="reference")
     quantifier = Sequence(Regex("[*+?]"), _, name="quantifier")
-    spaceless_literal = Regex("'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'",
+    spaceless_literal = Regex(p"""u?r?"[^"\\]*(?:\\.[^"\\]*)*" """[1:end-1],
         options="is",
         name="spaceless_literal")
     literal = Sequence(spaceless_literal, _, name="literal")
