@@ -126,7 +126,7 @@ function showerror(io::IO, e::VisitationError)
     print(io, "Exception: ")
     print(io, string(e.exc))
     print(io, "\nParse tree:\n")
-    print(io, prettily(e.node, error=e.node))
+    print(io, prettily(e.node, e.node))
 end
 
 function name(n::Node)
@@ -230,7 +230,9 @@ end
 
 # generic_visit -- not implemented in base class as it were
 function visit{T}(v::NodeVisitor, n::Node{T}, visited_children)
-    error("Go implement visit(::$(typeof(v)), ::Node{$(T)})) right now!")
+    # TODO: backtrace broken
+    println("Go implement visit(::$(string(typeof(v))), ::Node{$(name(n))})) right now!")
+    error("Go implement visit(::$(string(typeof(v))), ::Node{$(name(n))})) right now!")
 end
 
 # conveniently replace a node with its own visited_children

@@ -1,9 +1,9 @@
 
 module test_grammar
 
-#reload("Nodes.jl")
-#reload("Expressions.jl")
-#reload("Grammars.jl")
+reload("Nodes.jl")
+reload("Expressions.jl")
+reload("Grammars.jl")
 using Base.Test
 
 using Grammars
@@ -141,9 +141,10 @@ proof of concept.
 
 RuleVisitor = Grammars.RuleVisitor
 
+# TODO: This causes an error because no visit(v, ::Node{:number}, ...) implemented but the error message is messed up.
 tree = parse(rule_grammar, """number = ~"[0-9]+"\n""")
-"""
 rules, default_rule = visit(RuleVisitor(), tree)
+"""
 
 text = "98"
 eq_(parse(default_rule, text), Node("number", text, 1, 2))
