@@ -160,8 +160,6 @@ tree = parse(rule_grammar, "boy = howdy\n")
 #  ({"boy"=>LazyReference("boy")},LazyReference("boy"))
 # @test_throws visit(RuleVisitor(), tree)
 
-pprettily(tree)
-println("FAIL TO FAIL")
 @test_throws visit(RuleVisitor(), tree)  # ; debug=true)
 try
     visit(RuleVisitor(), tree)
@@ -169,22 +167,17 @@ catch e
     @test isa(e, Grammars.UndefinedLabel)
 end
 
-
-"""
-assert_raises(UndefinedLabel, RuleVisitor().visit, tree)
-
 # test optional(self):
-tree = rule_grammar.parse('boy = "howdy"?\n')
-rules, default_rule = RuleVisitor().visit(tree)
+tree = parse(rule_grammar, """boy = "howdy"?\n""")
+rules, default_rule = visit(RuleVisitor(), tree)
 
-howdy = 'howdy'
+howdy = "howdy"
 
 # It should turn into a Node from the Optional and another from the
 # Literal within.
-eq_(default_rule.parse(howdy), Node('boy', howdy, 0, 5, children=[
-                                   Node('', howdy, 0, 5)]))
+eq_(parse(default_rule, howdy), Node("boy", howdy, 1, 5, children=[Node("", howdy, 1, 5)]))
 
-
+"""
 class GrammarTests(TestCase):
 Integration-test ``Grammar``: feed it a PEG and see if it works.
 
