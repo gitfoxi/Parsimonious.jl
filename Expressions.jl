@@ -3,7 +3,7 @@ module Expressions
 
 import Base: match, rsearch, length, showerror, isequal, show
 using Nodes
-export LazyReference, unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal, @p_str, @p_mstr, show
+export LazyReference, unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal, @p_str, @p_mstr, show, as_rule, match
 
 abstract Expression # -ism
 abstract ParseException
@@ -114,21 +114,24 @@ function _uncached_match(literal::Literal, text::String, pos::Int64, cache::Dict
 end
 
 function _as_rhs(literal::Literal)
-    literal.literal
+    "\"" * literal.literal * "\""
 end
 
 type Regex <: Expression
     name::String
     re::Base.Regex
+    options
+    original_re
 
     function Regex(pattern, name="", options="")
+        original_re = pattern
         @assert(length(pattern) > 0)
         # Hat '^' enforces match from beginning of pattern
         if pattern[1] != '^'
             pattern = "^" * pattern
         end
 
-        new(name, Base.Regex(pattern, options))
+        new(name, Base.Regex(pattern, options), options, original_re)
     end
 end
 
@@ -152,7 +155,7 @@ function _uncached_match(regex::Regex, text::String, pos::Int64, cache::Dict, er
 end
 
 function _as_rhs(regex::Regex)
-    "~\"$(re.pattern)\"$(re.options)"
+    "~\"$(regex.original_re)\"$(regex.options)"
 end
 
 abstract _Compound <: Expression
@@ -233,7 +236,7 @@ function _uncached_match(sequence::Sequence, text::String, pos::Int64, cache::Di
 end
 
 function _as_rhs(sequence::Sequence)
-    return join(sequence.members, " ")
+    return join([m.name for m in sequence.members], " ")
 end
 
 type OneOf <: _Compound
@@ -350,7 +353,7 @@ function _uncached_match(self::ZeroOrMore, text::String, pos::Int64, cache::Dict
     return EmptyNode()
 end
 
-function _as_rhs(e::Optional)
+function _as_rhs(e::ZeroOrMore)
     join(e.members, " ") * "*"
 end
 
@@ -392,15 +395,16 @@ type LazyReference <: Expression
     label
 end
 
-_as_rhs(lr::LazyReference) = "<LazyReference to $(lr.name)>"
+_as_rhs(lr::LazyReference) = "<LazyReference to $(lr.label)>"
 
 unicode(lr::LazyReference) = lr.name
 
-function _as_rhs(e::Optional)
+function _as_rhs(e::OneOrMore)
     join(e.members, " ") * "+"
 end
 
 function as_rule(expr::Expression)
+    @show expr
     if expr.name == ""
         return _as_rhs(expr)
     end

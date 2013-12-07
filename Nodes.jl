@@ -142,6 +142,8 @@ end
 # It used to be the character after that but I'm refactoring so lots to change.
 function nodetext(n::Node)
 # TODO: not sure escape goes here or elsewhere or anywhere
+# TODO: I think this is maybe not doing unicode right. Or, it's partner spaceless_literal is cutting it off. Anyway, I need to install/configure urxvt and some nice colors before digging into that.
+
     n.fulltext[n.start:n._end]
 end
 

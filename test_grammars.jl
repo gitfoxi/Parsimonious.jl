@@ -9,6 +9,7 @@ using Base.Test
 using Grammars
 using Expressions
 using Nodes
+using Util
 
 # BootstrappingGrammarTests
 #Tests for the expressions in the grammar that parses the grammar
@@ -175,7 +176,7 @@ howdy = "howdy"
 
 # It should turn into a Node from the Optional and another from the
 # Literal within.
-eq_(parse(default_rule, howdy), Node("boy", howdy, 1, 5, children=[Node("", howdy, 1, 5)]))
+@test eq_(parse(default_rule, howdy), Node("boy", howdy, 1, 5, children=[Node("", howdy, 1, 5)]))
 
 """
 class GrammarTests(TestCase):
@@ -189,50 +190,57 @@ That the correct ``Expression`` tree is built is already tested in
 ``RuleGrammarTests``. This tests only that the ``Grammar`` base class's
 ``_expressions_from_rules`` works.
 
+"""
 
-greeting_grammar = Grammar('greeting = "hi" / "howdy"')
-tree = greeting_grammar.parse('hi')
-eq_(tree, Node('greeting', 'hi', 0, 2, children=[
-               Node('', 'hi', 0, 2)]))
+greeting_grammar = Grammar(s"""greeting = "hi" / "howdy" """)
+tree = parse(greeting_grammar, "hi")
+@test eq_(tree, Node("greeting", "hi", 1, 2, children=[Node("", "hi", 1, 2)]))
 
 # test unicode(self):
-Assert that a ``Grammar`` can convert into a string-formatted series
-of rules.
-grammar = Grammar(r
+# Assert that a ``Grammar`` can convert into a string-formatted series of rules.
+
+grammar = Grammar("""
                   bold_text  = bold_open text bold_close
-                  text       = ~"[A-Z 0-9]*"i
+                  text       = ~"[A-Z 0-9]*"is
                   bold_open  = "(("
                   bold_close = "))"
-                  )
-lines = unicode(grammar).splitlines()
-eq_(lines[0], 'bold_text = bold_open text bold_close')
-ok_('text = ~"[A-Z 0-9]*"i%s' % ('u' if version_info >= (3,) else '')
-    in lines)
-ok_('bold_open = "(("' in lines)
-ok_('bold_close = "))"' in lines)
-eq_(length(lines), 4)
+                  """)
+lines = split(unicode(grammar), "\n")
+function showln(x...)
+    show(x...)
+    println()
+end
+[showln(l) for l in lines]
+
+@test lines[1] == "bold_text = bold_open text bold_close"
+@show """text = ~"[A-Z 0-9]*"is"""
+@test in("""text = ~"[A-Z 0-9]*"is""", lines)
+@test in(s"""bold_open = "((" """, lines)
+@test in(s"""bold_close = "))" """, lines)
+@test length(lines) == 4
 
 # test match(self):
-Make sure partial-matching (with pos) works.
-grammar = Grammar(r
+# Make sure partial-matching (with pos) works.
+grammar = Grammar("""
                   bold_text  = bold_open text bold_close
                   text       = ~"[A-Z 0-9]*"i
                   bold_open  = "(("
                   bold_close = "))"
-                  )
-s = ' ((boo))yah'
-eq_(grammar.match(s, pos=1), Node('bold_text', s, 1, 8, children=[
-                                 Node('bold_open', s, 1, 3),
-                                 Node('text', s, 3, 6),
-                                 Node('bold_close', s, 6, 8)]))
+                  """)
+s = " ((boo))yah"
+@test eq_(match(grammar, s, 2), Node("bold_text", s, 2, 8, children=[
+                                 Node("bold_open", s, 2, 3),
+                                 Node("text", s, 4, 6),
+                                 Node("bold_close", s, 7, 8)]))
 
 # test bad_grammar(self):
-Constructing a Grammar with bad rules should raise ParseError.
-assert_raises(ParseError, Grammar, 'just a bunch of junk')
+# Constructing a Grammar with bad rules should raise ParseError.
+
+@assert_raises ParseError Grammar("just a bunch of junk")
 
 # test comments(self):
-Test tolerance of comments and blank lines in and around rules.
-grammar = Grammar(r# This is a grammar.
+# Test tolerance of comments and blank lines in and around rules.
+grammar = Grammar("""# This is a grammar.
 
                   # It sure is.
                   bold_text  = stars text stars  # nice
@@ -241,109 +249,51 @@ grammar = Grammar(r# This is a grammar.
 
                   stars      = "**"
                   # Pretty good
-                  #Oh yeah.#)  # Make sure a comment doesn't need a
+                  #Oh yeah.#""")  # Make sure a comment doesn't need a
                                   # \n or \r to end.
-eq_(list(sorted(str(grammar).splitlines())),
-    ['''bold_text = stars text stars''',
-     # TODO: Unicode flag is on by default in Python 3. I wonder if we
-     # should turn it on all the time in Parsimonious.
-     '''stars = "**"''',
-     '''text = ~"[A-Z 0-9]*"i%s''' % ('u' if version_info >= (3,)
-                                      else '')])
+
+# TODO: Maybe re-implement show(io::IO, g::Grammar) to do what str and unicode do. But not right now.
+# eq_(list(sorted(str(grammar).splitlines())),
+
+
+@test sort(split(unicode(grammar), "\n")) ==
+    ["""bold_text = stars text stars""",
+     s"""stars = "**" """,
+     """text = ~"[A-Z 0-9]*"i"""]
+
 
 # test multi_line(self):
-Make sure we tolerate all sorts of crazy line breaks and comments in
-the middle of rules.
-grammar = Grammar(
+# Make sure we tolerate all sorts of crazy line breaks and comments in
+# the middle of rules.
+grammar = Grammar("""
     bold_text  = bold_open  # commenty comment
                  text  # more comment
                  bold_close
     text       = ~"[A-Z 0-9]*"i
     bold_open  = "((" bold_close =  "))"
-    )
-ok_(grammar.parse('((booyah))') is not None)
+    """)
+ok_(parse(grammar, "((booyah))"))
 
 # test not(self):
-Make sure "not" predicates get parsed and work properly.
-grammar = Grammar(r'''not_arp = !"arp" ~"[a-z]+"''')
-assert_raises(ParseError, grammar.parse, 'arp')
-ok_(grammar.parse('argle') is not None)
+# Make sure "not" predicates get parsed and work properly.
+grammar = Grammar(s""" not_arp = !"arp" ~"[a-z]+" """)
+@assert_raises ParseError parse(grammar, "arp")
+@test ok_(parse(grammar, "argle"))
 
 # test lookahead(self):
-grammar = Grammar(r'''starts_with_a = &"a" ~"[a-z]+"''')
-assert_raises(ParseError, grammar.parse, 'burp')
+grammar = Grammar(s"""starts_with_a = &"a" ~"[a-z]+" """)
+@assert_raises ParseError parse(grammar, "burp")
 
-s = 'arp'
-eq_(grammar.parse('arp'), Node('starts_with_a', s, 0, 3, children=[
-                              Node('', s, 0, 0),
-                              Node('', s, 0, 3)]))
+s = "arp"
+@test eq_(parse(grammar, "arp"), Node("starts_with_a", s, 1, 3, children=[
+                              Node("", s, 1, 0),
+                              Node("", s, 1, 3)]))
 
 # test parens(self):
-grammar = Grammar(r'''sequence = "chitty" (" " "bang")+''')
+grammar = Grammar("""sequence = "chitty" (" " "bang")+""")
 # Make sure it's not as if the parens aren't there:
-assert_raises(ParseError, grammar.parse, 'chitty bangbang')
-
-s = 'chitty bang bang'
-eq_(str(grammar.parse(s)),
-    <Node called "sequence" matching "chitty bang bang">
-<Node matching "chitty">
-<Node matching " bang bang">
-<Node matching " bang">
-    <Node matching " ">
-    <Node matching "bang">
-<Node matching " bang">
-    <Node matching " ">
-    <Node matching "bang">)
-
-# test resolve_refs_order(self):
-Smoke-test a circumstance where lazy references don't get resolved.
-grammar = Grammar(
-    expression = "(" terms ")"
-    terms = term+
-    term = number
-    number = ~r"[0-9]+"
-    )
-grammar.parse('(34)')
-
-# test infinite_loop(self):
-Smoke-test a grammar that was causing infinite loops while building.
-
-This was going awry because the "int" rule was never getting marked as
-resolved, so it would just keep trying to resolve it over and over.
+@assert_raises ParseError parse(grammar, "chitty bangbang")
 
 
-Grammar(
-    digits = digit+
-    int = digits
-    digit = ~"[0-9]"
-    number = int
-    main = number
-    )
-
-# test right_recursive(self):
-Right-recursive refs should resolve.
-grammar = Grammar(
-    digits = digit digits?
-    digit = ~r"[0-9]"
-    )
-ok_(grammar.parse('12') is not None)
-
-# test badly_circular(self):
-Uselessly circular references should be detected by the grammar
-compiler.
-raise SkipTest('We have yet to make the grammar compiler detect these.')
-grammar = Grammar(
-    foo = bar
-    bar = foo
-    )
-
-# test parens_with_leading_whitespace(self):
-Make sure a parenthesized expression is allowed to have leading
-whitespace when nested directly inside another.
-Grammar(foo = ( ("c") )).parse('c')
-
-# test single_quoted_literals(self):
-Grammar(foo = 'a' '"').parse('a"')
-"""
 
 end

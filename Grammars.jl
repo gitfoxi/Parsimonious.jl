@@ -4,9 +4,10 @@ module Grammars
 
 using Nodes
 using Expressions
-export Grammar, lookup, rule_grammar, parse
+export Grammar, lookup, rule_grammar, parse, unicode, match
 
-import Expressions.parse
+# Have to import everything you want to overload and export
+import Expressions: parse, unicode, match
 
 type Grammar
     rules::String
@@ -32,9 +33,14 @@ function Grammar(rule_syntax::String)
     Grammar(rule_grammar, rule_syntax)
 end
 
-function parse(grammar::Grammar, text::String; pos=1)
+function parse(grammar::Grammar, text::String, pos=1)
     # TODO Expressions.parse to support pos parameter
-    parse(grammar.default_rule, text)
+    parse(grammar.default_rule, text, pos)
+end
+
+function match(grammar::Grammar, text::String, pos=1)
+    # TODO Expressions.parse to support pos parameter
+    match(grammar.default_rule, text, pos)
 end
 
 function _expressions_from_rules(grammar::Grammar, rules::String)
@@ -395,6 +401,18 @@ rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 3
 #            """)
 #@show g
 
+function unicode(g::Grammar)
+    """Return a rule string that, when passed to the constructor, would
+    reconstitute the grammar."""
+# TODO: This got hacked up in debugging. It was prettier to start.
+    sexprs = [as_rule(g.default_rule)]
+    for expr in g.exprs
+        if !is(expr[2], g.default_rule)
+            push!(sexprs, as_rule(expr[2]))
+        end
+    end
+    join([sexprs], "\n")
+end
 
 # Test
 #
