@@ -173,9 +173,16 @@ end
 type RuleVisitor <: NodeVisitor end
 
 # Same as visit(v::NodeVisitor, node::Node) but here for debugging ...
-function visit(v::NodeVisitor, node::Node)
+# TODO: benchmark the hit of supplying kw arguments but not using them
+function visit(v::NodeVisitor, node::Node; debug::Bool=false)
     # TODO: error handling
-    visit(v, node, [visit(v, n) for n in node])
+    visited_children = visit(v, node, [visit(v, n; debug=debug) for n in node])
+    if debug
+        println("DEBUG")
+        @show node
+        @show visited_children
+    end
+    visited_children
 end
 
 # generic_visit
@@ -255,7 +262,8 @@ end
 
 function visit(v::RuleVisitor, n::Node{:reference}, visited_children)
     label, not_equals = visited_children
-    LazyReference(label)
+    println("LAZY REFERENCE TO: ", label)
+    LazyReference("", label)
 end
 
 function visit(v::RuleVisitor, n::Node{:regex}, visited_children)
@@ -270,7 +278,19 @@ function visit(v::RuleVisitor, n::Node{:literal}, visited_children)
     spaceless_literal
 end
 
+type UndefinedLabel <: Exception
+    label
+end
+
+function showerror(io::IO, e::UndefinedLabel)
+    print(io,"The label $(e.label) was never defined.")
+end
+
+
 function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
+#    println("RESOLVE REFS")
+#    @show (rule_map, expr, unwalked_names, walking_names)
+
     """Return an expression with all its lazy references recursively
     resolved.
 
@@ -285,14 +305,7 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
     """
     # If it's a top-level (named) expression and we've already walked it,
     # don't walk it again:
-    # TODO: The lazy references are packing themselves into arrays, I don't know why
-    if isa(expr, Expression)
-        exprname = expr.name
-    elseif isa(expr, Node)
-        exprname = name(expr) # expr is a node
-    else
-        @assert 0
-    end
+    exprname = expr.name
     if !isempty(exprname) && !in(exprname, unwalked_names)
         # unwalked_names started out with all the rule names in it, so, if
         # this is a named expr and it isn't in there, it must have been
@@ -300,18 +313,21 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
         return rule_map[exprname]
     # If not, resolve it:
     elseif isa(expr, LazyReference)
-        label = unicode(expr)
+        label = expr.label
         if !in(label, walking_names)
             # We aren't already working on traversing this label:
             local reffed_expr
             try
                 reffed_expr = rule_map[label]
-            #except KeyError:
             catch e
                 if isa(e, KeyError)
                     # TODO: UndefinedLabel type
                     # throw(UndefinedLabel(expr))
-                    error("Undefined Label ", expr)
+                    println(rule_map)
+                    @show exprname
+                    @show expr.label
+                    @show expr.name
+                    throw(UndefinedLabel(expr))
                 end
                 rethrow(e)
             end

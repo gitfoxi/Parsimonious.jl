@@ -231,6 +231,7 @@ end
 # generic_visit -- not implemented in base class as it were
 function visit{T}(v::NodeVisitor, n::Node{T}, visited_children)
     # TODO: backtrace broken
+    # TODO: works on Linux, broken on OSX?
     println("Go implement visit(::$(string(typeof(v))), ::Node{$(name(n))})) right now!")
     error("Go implement visit(::$(string(typeof(v))), ::Node{$(name(n))})) right now!")
 end

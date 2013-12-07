@@ -1,9 +1,9 @@
 
-module test_grammar
+module test_grammars
 
-reload("Nodes.jl")
-reload("Expressions.jl")
-reload("Grammars.jl")
+# reload("Nodes.jl")
+# reload("Expressions.jl")
+# reload("Grammars.jl")
 using Base.Test
 
 using Grammars
@@ -139,19 +139,38 @@ Not everything was implemented yet, but it was a big milestone and a
 proof of concept.
 """
 
-RuleVisitor = Grammars.RuleVisitor
+import Grammars.RuleVisitor
+import Grammars.visit
 
 # TODO: This causes an error because no visit(v, ::Node{:number}, ...) implemented but the error message is messed up.
 tree = parse(rule_grammar, """number = ~"[0-9]+"\n""")
 rules, default_rule = visit(RuleVisitor(), tree)
-"""
 
 text = "98"
-eq_(parse(default_rule, text), Node("number", text, 1, 2))
+@test eq_(parse(default_rule, text), Node("number", text, 1, 2))
 
 # test undefined_rule(self):
-Make sure we throw the right exception on undefined rules.
-tree = rule_grammar.parse('boy = howdy\n')
+# Make sure we throw the right exception on undefined rules.
+
+tree = parse(rule_grammar, "boy = howdy\n")
+
+# TODO: fails to fail:
+# Also fails to remove the LazyReferences
+# Also, the references are wrong: Where's "howdy"?
+#  ({"boy"=>LazyReference("boy")},LazyReference("boy"))
+# @test_throws visit(RuleVisitor(), tree)
+
+pprettily(tree)
+println("FAIL TO FAIL")
+@test_throws visit(RuleVisitor(), tree)  # ; debug=true)
+try
+    visit(RuleVisitor(), tree)
+catch e
+    @test isa(e, Grammars.UndefinedLabel)
+end
+
+
+"""
 assert_raises(UndefinedLabel, RuleVisitor().visit, tree)
 
 # test optional(self):

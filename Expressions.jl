@@ -1,9 +1,9 @@
 
 module Expressions
 
-import Base: match, rsearch, length, showerror, isequal
+import Base: match, rsearch, length, showerror, isequal, show
 using Nodes
-export LazyReference, unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal, @p_str, @p_mstr
+export LazyReference, unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal, @p_str, @p_mstr, show
 
 abstract Expression # -ism
 abstract ParseException
@@ -387,7 +387,10 @@ function _uncached_match(self::OneOrMore, text::String, pos::Int64, cache::Dict,
     return EmptyNode()
 end
 
-type LazyReference <: Expression name end
+type LazyReference <: Expression 
+    name
+    label
+end
 
 _as_rhs(lr::LazyReference) = "<LazyReference to $(lr.name)>"
 
@@ -410,6 +413,32 @@ function unicode(expr::Expression)
     rulestr = as_rule(expr)
     id = hex(object_id(expr))
     "<$(class) $(rulestr) at 0x$(id)>"
+end
+
+indent(stack) = "  .  "^length(stack)
+exprid(expr) = string(typeof(expr)) * " <" * expr.name * ">"
+function show(io::IO, expr::Expression)
+    function reshow(io::IO, expr::Expression, stack::Set)
+        println(io, indent(stack), exprid(expr), ": ")
+        for field in sort(names(expr))
+            if(field == :name)
+# already taken care of
+            elseif(field == :members)
+                push!(stack, exprid(expr))
+                for m in expr.members
+                    if in(exprid(m), stack)
+                        println(io, indent(stack), "RECURSIVE " * exprid(expr) * " ...")
+                    else
+                        reshow(io, m, stack)
+                    end
+                end
+                delete!(stack, exprid(expr))
+            else
+                println(io, indent(stack), ' ', string(field), '(', getfield(expr, field), ')')
+            end
+        end
+    end
+    reshow(io, expr, Set())
 end
 
 end

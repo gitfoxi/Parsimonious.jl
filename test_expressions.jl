@@ -12,6 +12,7 @@ using Base.Test
 using Nodes
 using Expressions
 using Grammars
+using Util
 
 import Expressions.parse
 import Expressions.show
@@ -21,36 +22,6 @@ type TestExpression <: Expression
     name
 end
 
-function pause()
-    println("PAUSED")
-    readline()
-end
-
-indent(stack) = "  .  "^length(stack)
-exprid(expr) = string(typeof(expr)) * " <" * expr.name * ">"
-function show(io::IO, expr::Expression)
-    function reshow(io::IO, expr::Expression, stack::Set)
-        println(io, indent(stack), exprid(expr), ": ")
-        for field in sort(names(expr))
-            if(field == :name)
-# already taken care of
-            elseif(field == :members)
-                push!(stack, exprid(expr))
-                for m in expr.members
-                    if in(exprid(m), stack)
-                        println(io, indent(stack), "RECURSIVE " * exprid(expr) * " ...")
-                    else
-                        reshow(io, m, stack)
-                    end
-                end
-                delete!(stack, exprid(expr))
-            else
-                println(io, indent(stack), ' ', string(field), '(', getfield(expr, field), ')')
-            end
-        end
-    end
-    reshow(io, expr, Set())
-end
 
 # Try examples that will work on both Boot Grammar and Rule Grammar on both
 boot_gr, rule_gr = Grammars.boot_grammar(), Grammar()
