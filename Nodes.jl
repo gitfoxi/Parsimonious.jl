@@ -60,7 +60,13 @@ function show(io::IO, n::EmptyNode; indent=0)
 end
 
 function print(io::IO, n::Node)
-    print(io, "<Node called '" * name(n) * "' matching '" * nodetext(n) *"'>")
+    function reprint(n::Node, indent="")
+        print(io, indent, "<Node called '" * name(n) * "' matching '" * nodetext(n) *"'>\n")
+        for c in n.children
+            reprint(c, indent * "    ")
+        end
+    end
+    reprint(n)
 end
 
 function show(io::IO, n::Node)

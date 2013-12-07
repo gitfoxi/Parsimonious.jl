@@ -295,5 +295,82 @@ grammar = Grammar("""sequence = "chitty" (" " "bang")+""")
 @assert_raises ParseError parse(grammar, "chitty bangbang")
 
 
+# test lookahead(self):
+grammar = Grammar(s"""starts_with_a = &"a" ~"[a-z]+" """)
+@assert_raises ParseError parse(grammar, "burp")
 
+s = "arp"
+eq_(parse(grammar, "arp"), Node("starts_with_a", s, 1, 3, children=[
+                              Node("", s, 1, 0),
+                              Node("", s, 1, 3)]))
+
+# test parens(self):
+grammar = Grammar("""sequence = "chitty" (" " "bang")+""")
+# Make sure it's not as if the parens aren't there:
+@assert_raises ParseError parse(grammar, "chitty bangbang")
+
+
+s = "chitty bang bang"
+println(string(parse(grammar, s)))
+@test string(parse(grammar, s)) ==
+"""<Node called 'sequence' matching 'chitty bang bang'>
+    <Node called '' matching 'chitty'>
+    <Node called '' matching ' bang bang'>
+        <Node called '' matching ' bang'>
+            <Node called '' matching ' '>
+            <Node called '' matching 'bang'>
+        <Node called '' matching ' bang'>
+            <Node called '' matching ' '>
+            <Node called '' matching 'bang'>
+"""
+
+# test resolve_refs_order(self):
+# Smoke-test a circumstance where lazy references don't get resolved.
+grammar = Grammar("""
+    expression = "(" terms ")"
+    terms = term+
+    term = number
+    number = ~"[0-9]+"
+    """)
+parse(grammar, "(34)")
+
+# test infinite_loop(self):
+# Smoke-test a grammar that was causing infinite loops while building.
+# This was going awry because the "int" rule was never getting marked as
+# resolved, so it would just keep trying to resolve it over and over.
+
+Grammar("""
+    digits = digit+
+    int = digits
+    digit = ~"[0-9]"
+    number = int
+    main = number
+    """)
+
+# test right_recursive(self):
+# Right-recursive refs should resolve.
+grammar = Grammar("""
+    digits = digit digits?
+    digit = ~"[0-9]"
+    """)
+ok_(parse(grammar, "12"))
+
+# test badly_circular(self):
+# Uselessly circular references should be detected by the grammar
+# compiler.
+# raise SkipTest('We have yet to make the grammar compiler detect these.')
+
+# TODO: this should at least raise an error because not all of the references have been resolved
+grammar = Grammar("""
+    foo = bar
+    bar = foo
+    """)
+
+# test parens_with_leading_whitespace(self):
+# Make sure a parenthesized expression is allowed to have leading
+# whitespace when nested directly inside another.
+parse(Grammar("""foo = ( ("c") )"""), "c")
+
+# test single_quoted_literals(self):
+parse(Grammar("""foo = 'a' '"'"""), s"""a" """)
 end
