@@ -1,8 +1,14 @@
 
+module test_grammar
 
+#reload("Nodes.jl")
+#reload("Expressions.jl")
+#reload("Grammars.jl")
 using Base.Test
 
 using Grammars
+using Expressions
+using Nodes
 
 # BootstrappingGrammarTests
 #Tests for the expressions in the grammar that parses the grammar
@@ -10,85 +16,112 @@ using Grammars
 
 # test_quantifier(self):
 text = "*"
-@show parse(rule_grammar.exprs["quantifier"], text)
-"""
-@show Node("quantifier", text, 1, 2, children=[Node("", text, 1, 2), Node("_", text, 2, 2)])
-@show (rule_grammar["quantifier"].parse(text) == 
-    Node("quantifier", text, 1, 2, children=[
-        Node("", text, 1, 2), Node("_", text, 2, 2)]))
-text = "?"
-@show (rule_grammar["quantifier"].parse(text) ==
-    Node("quantifier", text, 1, 2, children=[
-        Node("", text, 1, 2), Node("_", text, 2, 2)]))
-text = "+"
-@show(rule_grammar["quantifier"].parse(text) ==
-    Node("quantifier", text, 1, 2, children=[
-        Node("", text, 1, 2), Node("_", text, 2, 2)]))
+@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, children=[Node("", text, 1, 1, match=match(r".", "*")), Node("_", text, 2, 1)])
 
+# TODO: Whether nodeA == nodeB regardless of "match" to make tests less verbose
+# After all, if they match the same text what's the difference?
+text = "?"
+@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, children=[Node("", text, 1, 1, match=match(r".", "?")), Node("_", text, 2, 1)])
+
+text = "+"
+@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, children=[Node("", text, 1, 1, match=match(r".", "+")), Node("_", text, 2, 1)])
+
+macro dq_str(s) "\"" * s * "\"" end
+macro sq_str(s) "'" * s * "'" end
+macro s_mstr(s) strip(lstrip(s))  end
+
+function eq_(a::Node, b::Node)
+    # Like isequal but ignore match for easier testing
+    typeof(a) == typeof(b) || return false
+    length(a) == length(b) || return false
+    is(a.fulltext, b.fulltext) || isequal(a.fulltext, b.fulltext) || return false
+    a.start == b.start && a._end == b._end || return false
+    for i in 1:length(a)
+        eq_(a.children[i], b.children[i]) || return false
+    end
+    true
+end
 
 # test spaceless_literal(self):
-# NOTE: removed a line here
-eq_(rule_grammar['spaceless_literal'].parse(text),
-    Node('spaceless_literal', text, 0, len(text), children=[
-        Node('', text, 0, len(text))]))
-text = r'''r"\""'''
-eq_(rule_grammar['spaceless_literal'].parse(text),
-    Node('spaceless_literal', text, 0, 5, children=[
-        Node('', text, 0, 5)]))
+text = dq"anything but quotes#$*&^"
+@test eq_(parse(rule_grammar.exprs["spaceless_literal"], text) , Node("spaceless_literal", text, 1, length(text), children=[Node("", text, 1, length(text))]))
+
+# TODO: benchmark visitors with array, tuple and vararg paramters
+# TODO: generic visit throw error when called for a node for which visit(::MyVisitor, ::Node{:mynode}) exists
+
+# text = r'''r"\""'''
+# text = p"""'''r"\""'''"""
+# TODO: Bug in spaceless_literal on this text. Or maybe not. At least it probably reports the wrong character for unconsumed text
+# TODO: Cool colorized, unicodized underlining of errors like clang
+# text = s""" "\\"" """
+text = unescape_string(s""" "\\"" """)
+@show text
+@show length(text)
+@show length(unescape_string(text))
+println(text)
+println(unescape_string(text))
+@test eq_(parse(rule_grammar.exprs["spaceless_literal"], text), Node("spaceless_literal", text, 1, 4, children=[ Node("", text, 1, 4)]))
 
 # test regex(self):
-text = '~"[a-zA-Z_][a-zA-Z_0-9]*"LI'
-eq_(rule_grammar['regex'].parse(text),
-    Node('regex', text, 0, len(text), children=[
-         Node('', text, 0, 1),
-         Node('spaceless_literal', text, 1, 25, children=[
-             Node('', text, 1, 25)]),
-         Node('', text, 25, 27),
-         Node('_', text, 27, 27)]))
+text = p"""~"[a-zA-Z_][a-zA-Z_0-9]*"LI"""
+
+@test eq_(parse(rule_grammar.exprs["regex"], text),
+    Node("regex", text, 1, length(text), children=[
+         Node("", text, 1, 1),
+         Node("spaceless_literal", text, 2, 25, children=[
+             Node("", text, 2, 25)]),
+         Node("", text, 26, 27),
+         Node("_", text, 28, 27)]))
+
+function ok_(n)
+    isa(n, Node)
+end
 
 # test successes(self):
-Make sure the PEG recognition grammar succeeds on various inputs.
-ok_(rule_grammar['label'].parse('_'))
-ok_(rule_grammar['label'].parse('jeff'))
-ok_(rule_grammar['label'].parse('_THIS_THING'))
+# Make sure the PEG recognition grammar succeeds on various inputs.
+@test ok_(parse(rule_grammar.exprs["label"], "_"))
+@test ok_(parse(rule_grammar.exprs["label"], "jeff"))
+@test ok_(parse(rule_grammar.exprs["label"], "_THIS_THING"))
 
-ok_(rule_grammar['atom'].parse('some_label'))
-ok_(rule_grammar['atom'].parse('"some literal"'))
-ok_(rule_grammar['atom'].parse('~"some regex"i'))
 
-ok_(rule_grammar['quantified'].parse('~"some regex"i*'))
-ok_(rule_grammar['quantified'].parse('thing+'))
-ok_(rule_grammar['quantified'].parse('"hi"?'))
+@test ok_(parse(rule_grammar.exprs["atom"], s""" "some_label" """))
+@test ok_(parse(rule_grammar.exprs["atom"], s""" "some literal" """))
+@test ok_(parse(rule_grammar.exprs["atom"], s""" ~"some regex"i """))
 
-ok_(rule_grammar['term'].parse('this'))
-ok_(rule_grammar['term'].parse('that+'))
+@test ok_(parse(rule_grammar.exprs["quantified"], s""" ~"some regex"i* """))
+@test ok_(parse(rule_grammar.exprs["quantified"], "thing+"))
+@test ok_(parse(rule_grammar.exprs["quantified"], s""" "hi"? """))
 
-ok_(rule_grammar['sequence'].parse('this that? other'))
+@test ok_(parse(rule_grammar.exprs["term"], "this"))
+@test ok_(parse(rule_grammar.exprs["term"], "that+"))
 
-ok_(rule_grammar['ored'].parse('this / that+ / "other"'))
+@test ok_(parse(rule_grammar.exprs["sequence"], "this that? other"))
+
+@test ok_(parse(rule_grammar.exprs["ored"], s"""this / that+ / "other" """))
 
 # + is higher precedence than &, so 'anded' should match the whole
 # thing:
-ok_(rule_grammar['lookahead_term'].parse('&this+'))
+@test ok_(parse(rule_grammar.exprs["lookahead_term"], "&this+"))
 
-ok_(rule_grammar['expression'].parse('this'))
-ok_(rule_grammar['expression'].parse('this? that other*'))
-ok_(rule_grammar['expression'].parse('&this / that+ / "other"'))
-ok_(rule_grammar['expression'].parse('this / that? / "other"+'))
-ok_(rule_grammar['expression'].parse('this? that other*'))
+@test ok_(parse(rule_grammar.exprs["expression"], "this"))
+@test ok_(parse(rule_grammar.exprs["expression"], "this? that other*"))
 
-ok_(rule_grammar['rule'].parse('this = that\r'))
-ok_(rule_grammar['rule'].parse('this = the? that other* \t\r'))
-ok_(rule_grammar['rule'].parse('the=~"hi*"\n'))
+@test ok_(parse(rule_grammar.exprs["expression"], s""" &this / that+ / "other" """))
+@test ok_(parse(rule_grammar.exprs["expression"], s""" this / that? / "other"+ """))
+@test ok_(parse(rule_grammar.exprs["expression"], "this? that other*"))
 
-ok_(rule_grammar.parse('''
+@test ok_(parse(rule_grammar.exprs["rule"], "this = that\r"))
+@test ok_(parse(rule_grammar.exprs["rule"], "this = the? that other* \t\r"))
+@test ok_(parse(rule_grammar.exprs["rule"], """the=~"hi*"\n"""))
+
+@test ok_(parse(rule_grammar, """
     this = the? that other*
     that = "thing"
     the=~"hi*"
     other = "ahoy hoy"
-    '''))
+    """))
 
-
+"""
 class RuleVisitorTests(TestCase):
 Tests for ``RuleVisitor``
 
@@ -104,13 +137,16 @@ and use that to parse another piece of text.
 
 Not everything was implemented yet, but it was a big milestone and a
 proof of concept.
+"""
 
+RuleVisitor = Grammars.RuleVisitor
 
-tree = rule_grammar.parse('''number = ~"[0-9]+"\n''')
-rules, default_rule = RuleVisitor().visit(tree)
+tree = parse(rule_grammar, """number = ~"[0-9]+"\n""")
+"""
+rules, default_rule = visit(RuleVisitor(), tree)
 
-text = '98'
-eq_(default_rule.parse(text), Node('number', text, 0, 2))
+text = "98"
+eq_(parse(default_rule, text), Node("number", text, 1, 2))
 
 # test undefined_rule(self):
 Make sure we throw the right exception on undefined rules.
@@ -161,7 +197,7 @@ ok_('text = ~"[A-Z 0-9]*"i%s' % ('u' if version_info >= (3,) else '')
     in lines)
 ok_('bold_open = "(("' in lines)
 ok_('bold_close = "))"' in lines)
-eq_(len(lines), 4)
+eq_(length(lines), 4)
 
 # test match(self):
 Make sure partial-matching (with pos) works.
@@ -296,3 +332,5 @@ Grammar(foo = ( ("c") )).parse('c')
 # test single_quoted_literals(self):
 Grammar(foo = 'a' '"').parse('a"')
 """
+
+end

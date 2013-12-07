@@ -368,8 +368,9 @@ function visit(v::RuleVisitor, n::Node{:spaceless_literal}, visited_children)
     Literal(nodetext(n)[2:end-1])
 end
 
-#rule_grammar = Grammar()  # Bootstrapping
-#rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 2
+rule_grammar = Grammar()  # Bootstrapping
+rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 2
+rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 3
 #@show rule_grammar
 #g = Grammar("""
 #            polite_greeting = greeting ', my good ' title
