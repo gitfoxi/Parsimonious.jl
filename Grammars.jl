@@ -60,8 +60,8 @@ rule_syntax = p"""
 
     # So you can't spell a regex like `~"..." ilm`:
     """ * """
-    spaceless_literal = ~"u?r?\\"[^\\"\\\\]*(?:\\\\.[^\\"\\\\]*)*\\""is /
-                        ~"u?r?'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'"is
+    spaceless_literal = ~"\\"[^\\"\\\\]*(?:\\\\.[^\\"\\\\]*)*\\""is /
+                        ~"'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'"is
     """ * p"""
     expression = ored / sequence / term
     or_term = "/" _ term
@@ -82,10 +82,10 @@ rule_syntax = p"""
     # rule defined somewhere else):
     label = ~"[a-zA-Z_][a-zA-Z_0-9]*" _
 
-    # _ = ~r"\s*(?:#[^\r\n]*)?\s*"
+    # _ = ~"\s*(?:#[^\r\n]*)?\s*"
     _ = meaninglessness*
-    meaninglessness = ~r"\s+" / comment
-    comment = ~r"#[^\r\n]*"
+    meaninglessness = ~"\s+" / comment
+    comment = ~"#[^\r\n]*"
 """
 
 function boot_expressions()
@@ -98,7 +98,7 @@ function boot_expressions()
     label = Sequence(Regex("[a-zA-Z_][a-zA-Z_0-9]*"), _, name="label")
     reference = Sequence(label, Not(equals), name="reference")
     quantifier = Sequence(Regex("[*+?]"), _, name="quantifier")
-    spaceless_literal = Regex(p"""u?r?"[^"\\]*(?:\\.[^"\\]*)*" """[1:end-1],
+    spaceless_literal = Regex(p""" "[^"\\]*(?:\\.[^"\\]*)*" """[2:end-1],
         options="is",
         name="spaceless_literal")
     literal = Sequence(spaceless_literal, _, name="literal")
@@ -363,7 +363,9 @@ end
 # TODO: unicode
 function visit(v::RuleVisitor, n::Node{:spaceless_literal}, visited_children)
     # strip the single quotes
-    Literal(escape_string(nodetext(n)[2:end-1]))
+    #println("LITERAL ", nodetext(n)[2:end-1], " FROM ", nodetext(n))
+    #pause()
+    Literal(nodetext(n)[2:end-1])
 end
 
 #rule_grammar = Grammar()  # Bootstrapping

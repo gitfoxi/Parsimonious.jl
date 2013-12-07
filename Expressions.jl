@@ -23,7 +23,7 @@ type IncompleteParseError <: ParseException
 end
 
 function showerror(io::IO, e::ParseError)
-    print(io, escape_string("Rule '$(e.expr.name)' didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e)))."))
+    print(io, "Rule '$(e.expr.name)' didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e))).")
 end
 
 function unicode(e::ParseException)
@@ -34,7 +34,7 @@ function unicode(e::ParseException)
 end
 
 function showerror(io::IO, e::IncompleteParseError)
-    print(io, escape_string("Rule $(e.expr.name) matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '$(e.text[e.pos:min(end,e.pos + 20)])' (line $(line(e)), column $(column(e)))."))
+    print(io, "Rule '$(e.expr.name)' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '$(e.text[e.pos+1:min(end,e.pos + 20)])' (line $(line(e)), column $(column(e))).")
 end
 
 line(e::ParseException) = 1 + count(e.text[1:e.pos-1]) do c c == '\n' end

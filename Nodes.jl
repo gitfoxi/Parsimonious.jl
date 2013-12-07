@@ -142,7 +142,7 @@ end
 # It used to be the character after that but I'm refactoring so lots to change.
 function nodetext(n::Node)
 # TODO: not sure escape goes here or elsewhere or anywhere
-    escape_string(n.fulltext[n.start:n._end])
+    n.fulltext[n.start:n._end]
 end
 
 isempty(::Node) = false
