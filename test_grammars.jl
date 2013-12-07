@@ -373,4 +373,5 @@ parse(Grammar("""foo = ( ("c") )"""), "c")
 
 # test single_quoted_literals(self):
 parse(Grammar("""foo = 'a' '"'"""), s"""a" """)
+
 end
