@@ -9,7 +9,7 @@ export Grammar, lookup, rule_grammar, parse
 import Expressions.parse
 
 type Grammar
-    rules::ASCIIString
+    rules::String
     default_rule::Expression
     exprs::Dict
 end
@@ -21,23 +21,23 @@ lookup(g::Grammar, key) = g.exprs[key]
 
 # As an interface, calling with similar parameters in a different order could
 # not be more fucking confusing. TODO: sort it out
-function Grammar(rule_grammar::Grammar, rule_syntax::ASCIIString;
+function Grammar(rule_grammar::Grammar, rule_syntax::String;
     default_rule=nothing)
     exprs, first_rule = _expressions_from_rules(rule_grammar, rule_syntax)
     default_rule = is(default_rule,nothing) ? first_rule : exprs[default_rule]
     Grammar(rule_syntax, default_rule, exprs)
 end
 
-function Grammar(rule_syntax::ASCIIString)
+function Grammar(rule_syntax::String)
     Grammar(rule_grammar, rule_syntax)
 end
 
-function parse(grammar::Grammar, text::ASCIIString; pos=1)
+function parse(grammar::Grammar, text::String; pos=1)
     # TODO Expressions.parse to support pos parameter
     parse(grammar.default_rule, text)
 end
 
-function _expressions_from_rules(grammar::Grammar, rules::ASCIIString)
+function _expressions_from_rules(grammar::Grammar, rules::String)
     tree = parse(grammar, rules)
     exprs, first_rule = visit(RuleVisitor(), tree)
 
@@ -160,7 +160,7 @@ function boot_grammar()
     Grammar("", exprs["rules"], exprs)
 end
 
-function _expressions_from_rules(rule_syntax::ASCIIString)
+function _expressions_from_rules(rule_syntax::String)
     rules = boot_expressions()["rules"]
 
     # Turn the parse tree into a map of expressions:
@@ -399,7 +399,7 @@ end
 #end
 #rules, default_rule = visit(RuleVisitor(), node)
 #@show rules, default_rule
-#@test is(default_rule, ASCIIString)
+#@test is(default_rule, String)
 #@test is(rules, Dict)
 
 

@@ -154,7 +154,11 @@ function isequal(a::Node, b::Node)
     length(a) == length(b) || return false
     is(a.fulltext, b.fulltext) || isequal(a.fulltext, b.fulltext) || return false
     a.start == b.start && a._end == b._end || return false
-    a.match == b.match || return false
+    a.match == b.match == nothing || begin
+        a.match.match.string == b.match.match.string
+        a.match.match.offset == b.match.match.offset
+        a.match.match.endof == b.match.match.endof
+    end || return false
     for i in 1:length(a)
         isequal(a.children[i], b.children[i]) || return false
     end

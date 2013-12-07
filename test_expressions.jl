@@ -225,6 +225,7 @@ for g in [rule_gr]
         @test e.pos == 7
         @test e.expr == lookup(grammar, "close_parens")
         @test e.text == text
+        @show unicode(e)
         @test unicode(e) == "Rule 'close_parens' didn't match at '!!' (line 1, column 7)."
     end
 
@@ -319,9 +320,9 @@ grammar = Grammar(rule_gr, p"""
     lah = "lah"
     """)
 print(grammar.default_rule)
-# TODO: This text does NOT parse which is bad. Need to revisit escaping issues
+# TODO: This text does parse which is good. Need to revisit escaping issues
 # To parse JSON you definitely need to escape quotes.
-@test parse(grammar, p"whee\nlah\n")
+parse(grammar, p"whee\nlah\n")
 
 try
     parse(grammar, p"whee\nlahGOO")
@@ -340,8 +341,9 @@ end
 #
 #    def test_unicode_crash(self):
 #        """Make sure matched unicode strings don"t crash ``__str__``."""
-#        grammar = Grammar(r"string = ~r"\S+"u")
-#        str(grammar.parse(u"中文"))
+grammar = Grammar(rule_gr, p"""string = ~"\S+" """)
+# TODO: <Node called 'string' matching '中'> -- something not right there
+println(parse(grammar, "中文"))
 #
 #    def test_unicode(self):
 #        """Smoke-test the conversion of expressions to bits of rules.
@@ -364,6 +366,8 @@ myf = ParseError("foo\nfoo\n", TestExpression("tst"), 1)
 myio = IOString()
 showerror(myio, myf)
 seekstart(myio)
+# TODO: Fucked up because of not escaping strings:
+# "Rule 'tst' didn't match at 'foo\n"
 @test readline(myio) == "Rule 'tst' didn't match at 'foo\\nfoo\\n' (line 1, column 1)."
 
 # Test
@@ -389,9 +393,9 @@ end
 
 
 
-@test parse(Regex("fo.*", options="", name="myregex"), "fooooo", 1) == Node("myregex", "fooooo", 1, 6)
-@test_throws parse(Regex("fo.*", options="", name="myregex"), "FOOOOO", 1) == Node("myregex", "FOOOOO", 1, 6)
-@test parse(Regex("fo.*", options="i", name="myregex"), "FOOOOO", 1) == Node("myregex", "FOOOOO", 1, 6)
+@test parse(Regex("fo.*", options="", name="myregex"), "fooooo", 1) == Node("myregex", "fooooo", 1, 6, match=match(r"fo.*", "fooooo"))
+@test_throws parse(Regex("fo.*", options="", name="myregex"), "FOOOOO", 1)
+@test parse(Regex("fo.*", options="i", name="myregex"), "FOOOOO", 1) == Node("myregex", "FOOOOO", 1, 6, match=match(r"fo.*"i, "FOOOOO"))
 @test parse(Sequence("seq", l, l), "foofoo", 1) == Node("seq", "foofoo", 1, 6, [Node("foo", "foofoo", 1, 3), Node("foo", "foofoo", 4, 6), ])
 @test parse(OneOf(Literal("foo"), Literal("bar")), "bar", 1) == Node("", "bar", 1, 3, [Node("", "bar", 1, 3)])
 @test parse(Sequence(Lookahead(Literal("fo")), Literal("foo")), "foo") == Node("", "foo", 1, 3, [Node("", "foo", 1, 0), Node("", "foo", 1, 3)])

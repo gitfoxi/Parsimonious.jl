@@ -9,7 +9,7 @@ abstract Expression # -ism
 abstract ParseException
 
 type ParseError <: ParseException
-    text::ASCIIString
+    text::String
     expr::Expression
     pos::Integer
 end
@@ -17,13 +17,13 @@ end
 # TODO: DRY
 # A future Julia feature will be abstract types with fields
 type IncompleteParseError <: ParseException
-    text::ASCIIString
+    text::String
     expr::Expression
     pos::Integer
 end
 
 function showerror(io::IO, e::ParseError)
-    print(io, "Rule '$(e.expr.name)' didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e))).")
+    print_escaped(io, "Rule '$(e.expr.name)' didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e))).", "")
 end
 
 function unicode(e::ParseException)
@@ -34,14 +34,14 @@ function unicode(e::ParseException)
 end
 
 function showerror(io::IO, e::IncompleteParseError)
-    print(io, "Rule '$(e.expr.name)' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '$(e.text[e.pos+1:min(end,e.pos + 20)])' (line $(line(e)), column $(column(e))).")
+    print_escaped(io, "Rule '$(e.expr.name)' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '$(e.text[e.pos+1:min(end,e.pos + 20)])' (line $(line(e)), column $(column(e))).", "")
 end
 
 line(e::ParseException) = 1 + count(e.text[1:e.pos-1]) do c c == '\n' end
 
 column(e::ParseException) = e.pos - rsearch(e.text, '\n', e.pos - 1)
 
-function parse(expr::Expression, text::ASCIIString, pos::Int64=1)
+function parse(expr::Expression, text::String, pos::Int64=1)
     node = match(expr, text, pos)
     if node._end != length(text)
         throw(IncompleteParseError(text, expr, node._end))
@@ -49,7 +49,7 @@ function parse(expr::Expression, text::ASCIIString, pos::Int64=1)
     node
 end
 
-function match(expr::Expression, text::ASCIIString, pos::Int64=1)
+function match(expr::Expression, text::String, pos::Int64=1)
     err = ParseError(text, expr, pos)
     node = _match!(expr, text, pos, Dict(), err)
     if isempty(node)
@@ -67,7 +67,7 @@ function hasfield(t, field)
     true
 end
 
-function _match!(expr::Expression, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _match!(expr::Expression, text::String, pos::Int64, cache::Dict, err::ParseError)
     expr_id = object_id(expr)
     key = (expr_id, pos)
     if !haskey(cache, key)
@@ -98,15 +98,15 @@ function _as_rhs(expr::Expression)
 end
 
 type Literal <: Expression
-    literal::ASCIIString
-    name::ASCIIString
+    literal::String
+    name::String
 end
 
 # TODO: get rid of all keyword default constructors because slow
 # Also, try not to use keyword constructors in Grammars.jl
-Literal(literal::ASCIIString; name::ASCIIString="") = Literal(literal, name)
+Literal(literal::String; name::String="") = Literal(literal, name)
 
-function _uncached_match(literal::Literal, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(literal::Literal, text::String, pos::Int64, cache::Dict, err::ParseError)
     if beginswith(text[pos:], literal.literal)
         return Node(literal.name, text, pos, pos - 1 + length(literal.literal))
     end
@@ -118,7 +118,7 @@ function _as_rhs(literal::Literal)
 end
 
 type Regex <: Expression
-    name::ASCIIString
+    name::String
     re::Base.Regex
 
     function Regex(pattern, name="", options="")
@@ -132,7 +132,7 @@ type Regex <: Expression
     end
 end
 
-Regex(pattern::ASCIIString; name="", options="") = Regex(pattern, name, options)
+Regex(pattern::String; name="", options="") = Regex(pattern, name, options)
 
 # This is really something magical. Say you want an unescaped string, just say:
 #    s = p"\'"
@@ -142,7 +142,7 @@ Regex(pattern::ASCIIString; name="", options="") = Regex(pattern, name, options)
 macro p_str(s) s end
 macro p_mstr(s) s end
 
-function _uncached_match(regex::Regex, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(regex::Regex, text::String, pos::Int64, cache::Dict, err::ParseError)
     m = match(regex.re, text[pos:])
     if isa(m, Nothing)
         return EmptyNode()
@@ -215,7 +215,7 @@ function isequal(a::_Compound, b::_Compound)
     true
 end
 
-function _uncached_match(sequence::Sequence, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(sequence::Sequence, text::String, pos::Int64, cache::Dict, err::ParseError)
     new_pos = pos
     length_of_sequence = 0
     children = Node[]
@@ -246,7 +246,7 @@ end
 
 OneOf(members::Expression...; name::String="") = OneOf(name, members...)
 
-function _uncached_match(oneof::OneOf, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(oneof::OneOf, text::String, pos::Int64, cache::Dict, err::ParseError)
     for m in oneof.members
         node = _match!(m, text, pos, cache, err)
         if !isempty(node)
@@ -270,7 +270,7 @@ end
 
 Lookahead(members::Expression...; name::String="") = Lookahead(name, members...)
 
-function _uncached_match(self::Lookahead, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(self::Lookahead, text::String, pos::Int64, cache::Dict, err::ParseError)
     node = _match!(self.members[1], text, pos, cache, err)
     if !isempty(node)
         return Node(self.name, text, pos, pos - 1)
@@ -292,7 +292,7 @@ end
 
 Not(members::Expression...; name::String="") = Not(name, members...)
 
-function _uncached_match(self::Not, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(self::Not, text::String, pos::Int64, cache::Dict, err::ParseError)
     node = _match!(self.members[1], text, pos, cache, err)
     if isempty(node)
         return Node(self.name, text, pos, pos - 1)
@@ -314,7 +314,7 @@ end
 
 Optional(members::Expression...; name::String="") = Optional(name, members...)
 
-function _uncached_match(self::Optional, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(self::Optional, text::String, pos::Int64, cache::Dict, err::ParseError)
     node = _match!(self.members[1], text, pos, cache, err)
     if isempty(node)
         return Node(self.name, text, pos, pos - 1)
@@ -336,7 +336,7 @@ end
 
 ZeroOrMore(members::Expression...; name::String="") = ZeroOrMore(name, members...)
 
-function _uncached_match(self::ZeroOrMore, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(self::ZeroOrMore, text::String, pos::Int64, cache::Dict, err::ParseError)
     new_pos = pos
     children = Node[]
     while true
@@ -366,7 +366,7 @@ end
 
 OneOrMore(members::Expression...; _min::Integer=1, name::String="") = OneOrMore(name, _min, members...)
 
-function _uncached_match(self::OneOrMore, text::ASCIIString, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(self::OneOrMore, text::String, pos::Int64, cache::Dict, err::ParseError)
     new_pos = pos
     children = Node[]
     while true
