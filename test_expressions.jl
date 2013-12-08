@@ -3,9 +3,9 @@
 # But it still doesn't seem to work. :(
 module test_expressions
 
-reload("Nodes.jl")
-reload("Expressions.jl")
-reload("Grammars.jl")
+# reload("Nodes.jl")
+# reload("Expressions.jl")
+# reload("Grammars.jl")
 
 using Base.Test
 # using Base.typeof
@@ -38,17 +38,15 @@ rule_gr_gr = parse(lookup(rule_gr, "rules"), Grammars.rule_syntax)
 # function wrap so I can time running independent of compilation
 # function go()
 
-function len_eq(node, length)
-    node_length = node._end - node.start + 1
-    if node_length != length
-        println("node_length: ", node_length, " length", length)
-    end
-    return node_length == length
+function len_eq(node, len)
+    return length(node) == len
 end
 
 # -- Length Tests --
 
 # Literal tests
+@show match(Literal("hello"), "ehello", 2)
+@show length(match(Literal("hello"), "ehello", 2))
 @test len_eq(match(Literal("hello"), "ehello", 2), 5)
 # Not sure if it's possible to have a match-nothing literal
 # @test len_eq(match(Literal(""), ""), 0)

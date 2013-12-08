@@ -44,8 +44,8 @@ column(e::ParseException) = e.pos - rsearch(e.text, '\n', e.pos - 1)
 
 function parse(expr::Expression, text::String, pos::Int=1)
     node = match(expr, text, pos)
-    if node._end != length(text)
-        throw(IncompleteParseError(text, expr, node._end))
+    if _end(node) != length(text)
+        throw(IncompleteParseError(text, expr, _end(node)))
     end
     node
 end
@@ -115,9 +115,9 @@ Literal(literal::String; name::String="") = Literal(literal, name)
 
 function _uncached_match(literal::Literal, text::String, pos::Int, cache::Dict, err::ParseError)
     if beginswith(text[pos:], literal.literal)
-        return ChildlessNode(literal.name, text, pos, pos - 1 + length(literal.literal))
+        return Node(literal.name, text, pos, pos - 1 + length(literal.literal))
     end
-    EmptyNode()  # "Empty" node
+    EmptyNode()  # "Empty" node == no match
 end
 
 function _as_rhs(literal::Literal)
@@ -154,7 +154,7 @@ function _uncached_match(regex::Regex, text::String, pos::Int, cache::Dict, err:
     if isa(m, Nothing)
         return EmptyNode()
     end
-    RegexNode(regex.name, text, pos, pos - 1 + length(m.match), m)
+    Node(regex.name, text, pos, pos - 1 + length(m.match)) # no longer special , m)
 end
 
 function _as_rhs(regex::Regex)
@@ -200,11 +200,6 @@ function Regex(pattern::Base.Regex; name="", options="")
     Regex(pattern.pattern, name, options)
 end
 
-@show Regex(r"asdf") , Regex("asdf")
-@show isequal(Regex(r"asdf") , Regex("asdf"))
-@test isequal(Regex(r"asdf") , Regex("asdf"))
-
-
 # TODO: Why can't isequal just work for any two same-type objects?
 # TODO: ask julia-users
 function isequal(a::_Compound, b::_Compound)
@@ -224,7 +219,7 @@ end
 function _uncached_match(sequence::Sequence, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
     length_of_sequence = 0
-    children = GoodNode[]
+    children = MatchNode[]
     for m in sequence.members
         node = _match(m, text, new_pos, cache, err)
         if isempty(node)
@@ -235,7 +230,7 @@ function _uncached_match(sequence::Sequence, text::String, pos::Int, cache::Dict
         length_of_sequence += textlength(node)
     end
     # Hooray! We got through all the members!
-    return ParentNode(sequence.name, text, pos, pos + length_of_sequence - 1, children)
+    return Node(sequence.name, text, pos, pos + length_of_sequence - 1, children)
 end
 
 function _as_rhs(sequence::Sequence)
@@ -257,7 +252,7 @@ function _uncached_match(oneof::OneOf, text::String, pos::Int, cache::Dict, err:
     for (i, m) in enumerate(members)
         node = _match(m, text, pos, cache, err)
         if !isempty(node)
-            return ParentNode(oneof.name, text, pos, node._end, [node])
+            return Node(oneof.name, text, pos, _end(node), [node])
         end
     end
     return EmptyNode()
@@ -280,7 +275,7 @@ Lookahead(members::Expression...; name::String="") = Lookahead(name, members...)
 function _uncached_match(self::Lookahead, text::String, pos::Int, cache::Dict, err::ParseError)
     node = _match(self.members[1], text, pos, cache, err)
     if !isempty(node)
-        return ChildlessNode(self.name, text, pos, pos - 1)
+        return Node(self.name, text, pos, pos - 1)
     end
     return EmptyNode()
 end
@@ -302,7 +297,7 @@ Not(members::Expression...; name::String="") = Not(name, members...)
 function _uncached_match(self::Not, text::String, pos::Int, cache::Dict, err::ParseError)
     node = _match(self.members[1], text, pos, cache, err)
     if isempty(node)
-        return ChildlessNode(self.name, text, pos, pos - 1)
+        return Node(self.name, text, pos, pos - 1)
     end
     return EmptyNode()
 end
@@ -324,9 +319,9 @@ Optional(members::Expression...; name::String="") = Optional(name, members...)
 function _uncached_match(self::Optional, text::String, pos::Int, cache::Dict, err::ParseError)
     node = _match(self.members[1], text, pos, cache, err)
     if isempty(node)
-        return ChildlessNode(self.name, text, pos, pos - 1)
+        return Node(self.name, text, pos, pos - 1)
     end
-    return ParentNode(self.name, text, pos, node._end, [node])
+    return Node(self.name, text, pos, _end(node), [node])
 end
 
 function _as_rhs(e::Optional)
@@ -345,11 +340,11 @@ ZeroOrMore(members::Expression...; name::String="") = ZeroOrMore(name, members..
 
 function _uncached_match(self::ZeroOrMore, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
-    children = GoodNode[]
+    children = MatchNode[]
     while true
         node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node) || textlength(node) == 0
-            return ParentNode(self.name, text, pos, new_pos - 1, children)
+            return Node(self.name, text, pos, new_pos - 1, children)
         end
         push!(children, node)
         new_pos += textlength(node)
@@ -375,7 +370,7 @@ OneOrMore(members::Expression...; _min::Int=1, name::String="") = OneOrMore(name
 
 function _uncached_match(self::OneOrMore, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
-    children = GoodNode[]
+    children = MatchNode[]
     while true
         node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node)
@@ -389,7 +384,7 @@ function _uncached_match(self::OneOrMore, text::String, pos::Int, cache::Dict, e
         new_pos += len
     end
     if length(children) >= self._min
-        return ParentNode(self.name, text, pos, new_pos - 1, children)
+        return Node(self.name, text, pos, new_pos - 1, children)
     end
     return EmptyNode()
 end
@@ -408,7 +403,6 @@ function _as_rhs(e::OneOrMore)
 end
 
 function as_rule(expr::Expression)
-    @show expr
     if expr.name == ""
         return _as_rhs(expr)
     end

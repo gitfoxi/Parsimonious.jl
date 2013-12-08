@@ -3,7 +3,7 @@ module Nodes
 using Base.Test
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, ChildlessNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
+export length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, ChildlessNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
 
 # I don't think EmptyNodes ever go in the tree. They are just used as a sort of
 # error message. You return an EmptyNode when you fail to match, for example.
@@ -85,8 +85,8 @@ ParentNode(T, n::MatchNode) = ParentNode(T, n.match, n.children)
 ChildlessNode(T, n::MatchNode) = ChildlessNode(T, n.match)
 
 textlength(node::MatchNode) = length(node.match)
-length(ZeroLengthMatch) = 0
-length(OneOrMoreMatch) = match._end - match.start + 1
+length(m::ZeroLengthMatch) = 0
+length(m::OneOrMoreMatch) = m._end - m.start + 1
 
 pos(m::ZeroLengthMatch) = m.pos
 pos(m::OneOrMoreMatch) = m.start
@@ -333,4 +333,12 @@ visit(v::TestVisitor, f::String, n::ChildlessNode{:generic}, _) = nodetext(n, f)
 @test_throws visit(TestVisitor(), "asdf", Node("notimplemented", 1, 2)) == "as"
 ####################### TEST
 
+# Refactoring convenience
+# TODO: test
+_end(m::OneOrMoreMatch) = m._end
+_end(m::ZeroLengthMatch) = m.pos - 1
+_end(n::MatchNode) = _end(n.match)
+Node(T::String, ::String, start::Int, _end::Int, children::Tuple) = Node(T, start, _end, children)
+Node(T::String, ::String, start::Int, _end::Int, children::Array) = Node(T, start, _end, tuple(children...))
+Node(T::String, ::String, start::Int, _end::Int) = Node(T, start, _end)
 end

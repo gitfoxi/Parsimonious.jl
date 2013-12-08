@@ -8,6 +8,8 @@ reload("Expressions.jl")
 using Util
 using Nodes
 using Expressions
+import Nodes.visit
+
 export Grammar, lookup, rule_grammar, parse, unicode, match
 
 # Have to import everything you want to overload and export
@@ -49,7 +51,7 @@ end
 
 function _expressions_from_rules(grammar::Grammar, rules::String)
     tree = parse(grammar, rules)
-    exprs, first_rule = visit(RuleVisitor(), tree)
+    exprs, first_rule = visit(RuleVisitor(), rules, tree)
 
     exprs, first_rule
 end
@@ -175,67 +177,43 @@ function _expressions_from_rules(rule_syntax::String)
 
     # Turn the parse tree into a map of expressions:
     rule_tree = parse(rules, rule_syntax)
-    pprettily(rule_tree)
-    exprs, default_rule = visit(RuleVisitor(), rule_tree)
+    println(rule_tree)
+    exprs, default_rule = visit(RuleVisitor(), rule_syntax, rule_tree)
     return exprs, default_rule
 end
 
 type RuleVisitor <: NodeVisitor end
 
-# Same as visit(v::NodeVisitor, node::Node) but here for debugging ...
-# TODO: benchmark the hit of supplying kw arguments but not using them
-function visit(v::NodeVisitor, node::LeafNode; debug::Bool=false)
-    error("Visitor $(typeof(v)) not implemented for Node $(typeof(node))")
-end
-
-function visit(v::NodeVisitor, node::ParentNode; debug::Bool=false)
-    # TODO: error handling
-    @show v
-    visited_children = [visit(v, n) for n in node]
-    @show visited_children
-    visited_children = visit(v, node, visited_children)
-    if debug
-        println("DEBUG")
-        @show node
-        @show visited_children
-    end
-    visited_children
-end
-
 # generic_visit
-function visit(v::RuleVisitor, n::LeafNode)
-    if isa(n, RegexNode)
-        warn("generic call for regex node " * string(typeof(n)) * " -- " * nodetext(n))
-        if(nothing != match(r"spaceless_literal", string(typeof(n))))
-            error("generic call for spaceless_literal")
-        end
-    end
+function visit(v::RuleVisitor, f::String, n::LeafNode)
+    warn("generic call for node " * string(typeof(n)) * " -- " * nodetext(n, f))
     return n
 end
 
-function visit(v::RuleVisitor, n::ParentNode, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode, visited_children)
+    warn("generic call for node " * string(typeof(n)) * " -- " * nodetext(n, f))
     return visited_children
 end
 
 # TODO: tuples not arrays for visited_children
-visit(v::RuleVisitor, n::ParentNode{:expression}, visited_children) = visited_children[1]
-visit(v::RuleVisitor, n::ParentNode{:term}, visited_children) = visited_children[1]
-visit(v::RuleVisitor, n::ParentNode{:atom}, visited_children) = visited_children[1]
+visit(v::RuleVisitor, f::String, n::ParentNode{:expression}, visited_children) = visited_children[1]
+visit(v::RuleVisitor, f::String, n::ParentNode{:term}, visited_children) = visited_children[1]
+visit(v::RuleVisitor, f::String, n::ParentNode{:atom}, visited_children) = visited_children[1]
 
-function visit(v::RuleVisitor, n::ParentNode{:parenthesized}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:parenthesized}, visited_children)
     left_paren, _1, expression, right_paren, _2 = visited_children
     expression
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:quantifier}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:quantifier}, visited_children)
     symbol, _ = visited_children
     symbol
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:quantified}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:quantified}, visited_children)
     atom, quantifier = visited_children
 
-    quantifier = nodetext(quantifier)[1]
+    quantifier = nodetext(quantifier, f)[1]
     if quantifier == '?'
         return Optional(atom)
     elseif quantifier == '*'
@@ -246,17 +224,17 @@ function visit(v::RuleVisitor, n::ParentNode{:quantified}, visited_children)
     error("How is '" * string(quantifier) * "' a quantifier to you?")
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:lookahead_term}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:lookahead_term}, visited_children)
     ampersand, term, _ = visited_children
     Lookahead(term)
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:not_term}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:not_term}, visited_children)
     exclamation, term, _ = visited_children
     Not(term)
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:rule}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:rule}, visited_children)
     label, equals, expression = visited_children
 
     # Apply label.label as name to copy of expression
@@ -268,7 +246,7 @@ function visit(v::RuleVisitor, n::ParentNode{:rule}, visited_children)
     end
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:sequence}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:sequence}, visited_children)
     term, terms = visited_children
     try
         return Sequence(term, terms...)
@@ -277,30 +255,28 @@ function visit(v::RuleVisitor, n::ParentNode{:sequence}, visited_children)
     end
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:ored}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:ored}, visited_children)
     term, terms, = visited_children
     OneOf(term, terms...)
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:or_term}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:or_term}, visited_children)
     slash, _, term = visited_children
     term
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:label}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:label}, visited_children)
     name, _ = visited_children
-    @show name
-    @show _
-    nodetext(name)
+    nodetext(name, f)
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:reference}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:reference}, visited_children)
     label, not_equals = visited_children
     println("LAZY REFERENCE TO: ", label)
     LazyReference("", label)
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:regex}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:regex}, visited_children)
     tilde, literal, flags, _ = visited_children
     try
         println("LITERAL: " * literal.literal)
@@ -309,11 +285,11 @@ function visit(v::RuleVisitor, n::ParentNode{:regex}, visited_children)
     end
 
     pattern = literal.literal
-    flags = lowercase(nodetext(flags))
+    flags = lowercase(nodetext(flags, f))
     Expressions.Regex(pattern, options=flags)
 end
 
-function visit(v::RuleVisitor, n::ParentNode{:literal}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:literal}, visited_children)
     spaceless_literal, _ = visited_children
     spaceless_literal
 end
@@ -364,9 +340,6 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
                     # TODO: UndefinedLabel type
                     # throw(UndefinedLabel(expr))
                     println(rule_map)
-                    @show exprname
-                    @show expr.label
-                    @show expr.name
                     throw(UndefinedLabel(expr))
                 end
                 rethrow(e)
@@ -396,7 +369,7 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
 end
 
 # return dictionary of expressions and a rule name
-function visit(v::RuleVisitor, n::ParentNode{:rules}, visited_children)
+function visit(v::RuleVisitor, f::String, n::ParentNode{:rules}, visited_children)
     _, rules = visited_children
 
     rule_map = {expr.name => expr for expr in rules}
@@ -412,13 +385,13 @@ end
 
 # TODO: Need a function for escaping \n, \t etc
 # TODO: unicode
-function visit(v::RuleVisitor, n::RegexNode{:spaceless_literal}, _)
-    pause("SPACELESS: " * nodetext(n) * " _:" * _ )
-    Literal(nodetext(n)[2:end-1])
+function visit(v::RuleVisitor, f::String, n::ParentNode{:spaceless_literal}, _)
+    # pause("SPACELESS: " * nodetext(n, f) * " _:" * string(_) )
+    Literal(nodetext(n, f)[2:end-1])
 end
 
-function visit(v::RuleVisitor, n::RegexNode{:spaceless_literal})
-    Literal(nodetext(n)[2:end-1])
+function visit(v::RuleVisitor, f::String, n::ChildlessNode{:spaceless_literal})
+    Literal(nodetext(n, f)[2:end-1])
 end
 
 rule_grammar = Grammar()  # Bootstrapping
