@@ -27,10 +27,6 @@ text = "?"
 text = "+"
 @test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, children=[Node("", text, 1, 1, match=match(r".", "+")), Node("_", text, 2, 1)])
 
-macro dq_str(s) "\"" * s * "\"" end
-macro sq_str(s) "'" * s * "'" end
-macro s_mstr(s) strip(lstrip(s))  end
-
 function eq_(a::Node, b::Node)
     # Like isequal but ignore match for easier testing
     typeof(a) == typeof(b) || return false

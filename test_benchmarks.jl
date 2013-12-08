@@ -9,26 +9,6 @@ using Base.Test
 
 # TODO: Implement convergence in Benchmark necessetating some LiveStates functionality too.
 
-macro timeit(run, setup)
-    quote
-        eval($(setup))
-        f = eval($(run))
-        [f(i) for i in 1:100] # compile
-        # benchmark(f, string($(run)), 500000)["AverageWall"][1]
-        n = 500000
-        td = Array(Uint64, n)
-        q = 0.
-        for (i, x) in zip(1:n, rand(Uint64, n))
-            t_start = time_ns()
-            q += f(x)
-            t_end = time_ns()
-            td[i] = t_end - t_start
-        end
-        println(q)  # so it can't optimize out no matter how smart
-        mean(td)
-    end
-end
-
 percentdiff(a, b) = 100 * (a-b)/a
 
 # def test_lists_vs_dicts():
