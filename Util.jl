@@ -10,8 +10,8 @@ macro sq_str(s) "'" * s * "'" end
 macro s_mstr(s) strip(lstrip(s))  end
 
 
-function pause()
-    println("PAUSED")
+function pause(msg="PAUSED")
+    println(msg)
     readline()
 end
 

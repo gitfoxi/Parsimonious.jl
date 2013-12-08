@@ -20,6 +20,7 @@ module benchmarks
 
 using Util
 using Grammars
+export parse, grammar, json
 
 # def test_not_really_json_parsing():
 """As a baseline for speed, parse some JSON.
@@ -88,6 +89,7 @@ notjsonspec = """
 println(notjsonspec)
 grammar = Grammar(notjsonspec)
 
+# This is what it takes to debug stupid quoting issues
 parse(grammar.exprs["chars"], """hello""")
 parse(grammar.exprs["number"], """12""")
 parse(grammar.exprs["dq"], "\"")
@@ -102,10 +104,17 @@ REPEAT = 5
 
 parse(grammar, father)
 parse(grammar, json)
-for i in 1:1000
+for i in 1:10
+    # Disabling garbage collection during parse gets more consistent results and
+    # gets the time down below 200ms. I think this is what's going on in the
+    # Python benchmark as well so that accounts for some of the difference.
+    gc_disable()
+    # @timed -> (return vale, time in seconds, memory in bytes)
     @time parse(grammar, json)
+    gc_enable()
+    gc()
 end
-@timeit :(parse(grammar, json)) :() 1000
+# @timeit :(parse(grammar, json)) :() 1000
 
 end
 

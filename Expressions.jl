@@ -12,7 +12,7 @@ abstract ParseException
 type ParseError <: ParseException
     text::String
     expr::Expression
-    pos::Integer
+    pos::Int
 end
 
 # TODO: DRY
@@ -20,7 +20,7 @@ end
 type IncompleteParseError <: ParseException
     text::String
     expr::Expression
-    pos::Integer
+    pos::Int
 end
 
 function showerror(io::IO, e::ParseError)
@@ -42,7 +42,7 @@ line(e::ParseException) = 1 + count(e.text[1:e.pos-1]) do c c == '\n' end
 
 column(e::ParseException) = e.pos - rsearch(e.text, '\n', e.pos - 1)
 
-function parse(expr::Expression, text::String, pos::Int64=1)
+function parse(expr::Expression, text::String, pos::Int=1)
     node = match(expr, text, pos)
     if node._end != length(text)
         throw(IncompleteParseError(text, expr, node._end))
@@ -50,9 +50,9 @@ function parse(expr::Expression, text::String, pos::Int64=1)
     node
 end
 
-function match(expr::Expression, text::String, pos::Int64=1)
-    err = ParseError(text, expr, pos)
-    node = _match!(expr, text, pos, Dict(), err)
+function match(expr::Expression, text::String, pos::Int=1)
+    err::ParseError = ParseError(text, expr, pos)
+    node = _match(expr, text, pos, Dict{(Int, Int), AnyNode}(), err)
     if isempty(node)
         throw(err)
     end
@@ -68,12 +68,18 @@ function hasfield(t, field)
     true
 end
 
-function _match!(expr::Expression, text::String, pos::Int64, cache::Dict, err::ParseError)
-    expr_id = object_id(expr)
-    key = (expr_id, pos)
+function _match(expr::Expression, text::String, pos::Int, cache::Dict, err::ParseError)
+    expr_id::Int = object_id(expr)
+    key::(Int, Int) = (expr_id, pos)
     if !haskey(cache, key)
+        # TODO: hottest of all hot spots here
         node = cache[key] = _uncached_match(expr, text, pos, cache, err)
-        cache[key] = node
+        # For fun, to see memory savings:
+        # node = _uncached_match(expr, text, pos, cache, err)
+        # Surprisingly, memory usage went up to 183M without the cache from 139M with.
+        # Either way that is a lot of fucking memory allocated to parse a few kB of text.
+        # Hopefully @time reports it some wierd way and it's not really chewing up so
+        # much memory.
     else
         node = cache[key]
     end
@@ -107,9 +113,9 @@ end
 # Also, try not to use keyword constructors in Grammars.jl
 Literal(literal::String; name::String="") = Literal(literal, name)
 
-function _uncached_match(literal::Literal, text::String, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(literal::Literal, text::String, pos::Int, cache::Dict, err::ParseError)
     if beginswith(text[pos:], literal.literal)
-        return Node(literal.name, text, pos, pos - 1 + length(literal.literal))
+        return ChildlessNode(literal.name, text, pos, pos - 1 + length(literal.literal))
     end
     EmptyNode()  # "Empty" node
 end
@@ -143,13 +149,12 @@ Regex(pattern::String; name="", options="") = Regex(pattern, name, options)
 # And you will have a 2 character string where the characters are '\' and '''.
 # How does the macro do it? I don't know. Thanks `regex.jl`
 
-function _uncached_match(regex::Regex, text::String, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(regex::Regex, text::String, pos::Int, cache::Dict, err::ParseError)
     m = match(regex.re, text[pos:])
     if isa(m, Nothing)
         return EmptyNode()
     end
-    assert(m.offset == 1)  # should only match start of text
-    Node(regex.name, text, pos, pos - 1 + length(m.match), match=m)
+    RegexNode(regex.name, text, pos, pos - 1 + length(m.match), m)
 end
 
 function _as_rhs(regex::Regex)
@@ -216,12 +221,12 @@ function isequal(a::_Compound, b::_Compound)
     true
 end
 
-function _uncached_match(sequence::Sequence, text::String, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(sequence::Sequence, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
     length_of_sequence = 0
-    children = Node[]
+    children = GoodNode[]
     for m in sequence.members
-        node = _match!(m, text, new_pos, cache, err)
+        node = _match(m, text, new_pos, cache, err)
         if isempty(node)
             return node
         end
@@ -230,7 +235,7 @@ function _uncached_match(sequence::Sequence, text::String, pos::Int64, cache::Di
         length_of_sequence += textlength(node)
     end
     # Hooray! We got through all the members!
-    return Node(sequence.name, text, pos, pos + length_of_sequence - 1, children)
+    return ParentNode(sequence.name, text, pos, pos + length_of_sequence - 1, children)
 end
 
 function _as_rhs(sequence::Sequence)
@@ -238,8 +243,8 @@ function _as_rhs(sequence::Sequence)
 end
 
 type OneOf <: _Compound
-    name
-    members
+    name::String
+    members # ::(Expression...) -- crashes resolve_refs
 
     OneOf(name::String, members::Expression...) = new(name,members)
     OneOf(members::Expression...) = new("", members)
@@ -247,11 +252,12 @@ end
 
 OneOf(members::Expression...; name::String="") = OneOf(name, members...)
 
-function _uncached_match(oneof::OneOf, text::String, pos::Int64, cache::Dict, err::ParseError)
-    for m in oneof.members
-        node = _match!(m, text, pos, cache, err)
+function _uncached_match(oneof::OneOf, text::String, pos::Int, cache::Dict, err::ParseError)
+    local members = oneof.members
+    for (i, m) in enumerate(members)
+        node = _match(m, text, pos, cache, err)
         if !isempty(node)
-            return Node(oneof.name, text, pos, node._end, [node])
+            return ParentNode(oneof.name, text, pos, node._end, [node])
         end
     end
     return EmptyNode()
@@ -271,10 +277,10 @@ end
 
 Lookahead(members::Expression...; name::String="") = Lookahead(name, members...)
 
-function _uncached_match(self::Lookahead, text::String, pos::Int64, cache::Dict, err::ParseError)
-    node = _match!(self.members[1], text, pos, cache, err)
+function _uncached_match(self::Lookahead, text::String, pos::Int, cache::Dict, err::ParseError)
+    node = _match(self.members[1], text, pos, cache, err)
     if !isempty(node)
-        return Node(self.name, text, pos, pos - 1)
+        return ChildlessNode(self.name, text, pos, pos - 1)
     end
     return EmptyNode()
 end
@@ -293,10 +299,10 @@ end
 
 Not(members::Expression...; name::String="") = Not(name, members...)
 
-function _uncached_match(self::Not, text::String, pos::Int64, cache::Dict, err::ParseError)
-    node = _match!(self.members[1], text, pos, cache, err)
+function _uncached_match(self::Not, text::String, pos::Int, cache::Dict, err::ParseError)
+    node = _match(self.members[1], text, pos, cache, err)
     if isempty(node)
-        return Node(self.name, text, pos, pos - 1)
+        return ChildlessNode(self.name, text, pos, pos - 1)
     end
     return EmptyNode()
 end
@@ -315,12 +321,12 @@ end
 
 Optional(members::Expression...; name::String="") = Optional(name, members...)
 
-function _uncached_match(self::Optional, text::String, pos::Int64, cache::Dict, err::ParseError)
-    node = _match!(self.members[1], text, pos, cache, err)
+function _uncached_match(self::Optional, text::String, pos::Int, cache::Dict, err::ParseError)
+    node = _match(self.members[1], text, pos, cache, err)
     if isempty(node)
-        return Node(self.name, text, pos, pos - 1)
+        return ChildlessNode(self.name, text, pos, pos - 1)
     end
-    return Node(self.name, text, pos, node._end, [node])
+    return ParentNode(self.name, text, pos, node._end, [node])
 end
 
 function _as_rhs(e::Optional)
@@ -337,13 +343,13 @@ end
 
 ZeroOrMore(members::Expression...; name::String="") = ZeroOrMore(name, members...)
 
-function _uncached_match(self::ZeroOrMore, text::String, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(self::ZeroOrMore, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
-    children = Node[]
+    children = GoodNode[]
     while true
-        node = _match!(self.members[1], text, new_pos, cache, err)
+        node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node) || textlength(node) == 0
-            return Node(self.name, text, pos, new_pos - 1, children)
+            return ParentNode(self.name, text, pos, new_pos - 1, children)
         end
         push!(children, node)
         new_pos += textlength(node)
@@ -356,22 +362,22 @@ function _as_rhs(e::ZeroOrMore)
 end
 
 type OneOrMore <: _Compound
-    name
-    _min
+    name::String
+    _min::Int
     members
 
     # TODO: too many constructors -- members should always be first because it's the only thing that is always there
-    OneOrMore(name::String="", _min::Integer=1, members::Expression...=Expression[]) = new(name, _min, members)
-    OneOrMore(members::Expression...=Expression[], name::String="", _min::Integer=1) = new(name, _min, members)
+    OneOrMore(name::String="", _min::Int=1, members::Expression...=Expression[]) = new(name, _min, members)
+    OneOrMore(members::Expression...=Expression[], name::String="", _min::Int=1) = new(name, _min, members)
 end
 
-OneOrMore(members::Expression...; _min::Integer=1, name::String="") = OneOrMore(name, _min, members...)
+OneOrMore(members::Expression...; _min::Int=1, name::String="") = OneOrMore(name, _min, members...)
 
-function _uncached_match(self::OneOrMore, text::String, pos::Int64, cache::Dict, err::ParseError)
+function _uncached_match(self::OneOrMore, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
-    children = Node[]
+    children = GoodNode[]
     while true
-        node = _match!(self.members[1], text, new_pos, cache, err)
+        node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node)
             break
         end
@@ -383,7 +389,7 @@ function _uncached_match(self::OneOrMore, text::String, pos::Int64, cache::Dict,
         new_pos += len
     end
     if length(children) >= self._min
-        return Node(self.name, text, pos, new_pos - 1, children)
+        return ParentNode(self.name, text, pos, new_pos - 1, children)
     end
     return EmptyNode()
 end

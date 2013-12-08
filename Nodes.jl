@@ -1,141 +1,157 @@
 
 module Nodes
+using Base.Test
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export pprettily, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
+export LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, ChildlessNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
 
-RegexMatchOrNothing = Union(RegexMatch, Nothing)
+# I don't think EmptyNodes ever go in the tree. They are just used as a sort of
+# error message. You return an EmptyNode when you fail to match, for example.
 
-abstract AbstractNode
+immutable ZeroLengthMatch
+    pos::Int
+end
 
-immutable EmptyNode <: AbstractNode end
+immutable OneOrMoreMatch
+    start::Int
+    _end::Int
 
-immutable Node{T} <: AbstractNode
-    fulltext::String
-    start::Integer
-    _end::Integer
-    children
-    match::RegexMatchOrNothing
-
-    function Node(fulltext::String, start::Integer, _end::Integer, children, match)
-        @assert start > 0
-        @assert _end <= length(fulltext)
-        # _end < start is OK and indicates an empty match string
-        new(fulltext, start, _end, children, match)
+    function OneOrMoreMatch(start::Int, _end::Int)
+        #@assert start > 0
+        #@assert _end <= length(fulltext)
+        #@assert _end >= start
+        new(start, _end)
     end
 end
 
-function Node(T, fulltext::String, start::Integer, _end::Integer, children=AbstractNode[], match=nothing)
-    Node{symbol(T)}(fulltext, start, _end, children, match)
+Match = Union(ZeroLengthMatch, OneOrMoreMatch)
+
+abstract MatchNode
+
+immutable ParentNode{T} <: MatchNode
+    match::Match
+    children::Tuple
+
+    # TODO: More specific type for children
+    # Array{AbstractNode, 1} or Array{Node, 1} or Array{Node{:}} don't seem to work
+    ParentNode(start::Int, _end::Int, children) = new(OneOrMoreMatch(start, _end), children)
+    ParentNode(pos::Int, children) = new(ZeroLengthMatch(pos), children)
 end
 
-# Fully keywordized. Is it a good idea?
-function Node(;T="", fulltext::String="", start::Integer=0, _end::Integer=0, children=AbstractNode[], match=nothing)
-    Node{symbol(T)}(fulltext, start, _end, children, match)
+immutable ChildlessNode{T} <: MatchNode
+    match::Match
+
+    ChildlessNode(start::Int, _end::Int) = new(OneOrMoreMatch(start, _end))
+    ChildlessNode(pos::Int) = new(ZeroLengthMatch(pos))
 end
 
-# Partly keywordized. Is it a good idea?
-function Node(T, fulltext::String, start::Integer, _end::Integer; children=AbstractNode[], match=nothing)
-    Node{symbol(T)}(fulltext, start, _end, children, match)
-end
+# Union does not serve my purposes
+# Node = Union(ParentNode, EmptyNode, RegexNode, ChildlessNode)
+# MatchNode = Union(ParentNode, ChildlessNode)
+LeafNode = Union(ChildlessNode)  # because I might want to specialize leaf types ...
+typealias EmptyNode Nothing
+AnyNode = Union(EmptyNode, ParentNode, ChildlessNode)
 
-# Copy with new name
-function Node(T, n::Node)
-    m = Node(T, n.fulltext, n.start, n._end, n.children, n.match)
-    println("COPIED", n, "TO", n)
-    m
-end
-
-# Node() = EmptyNode() # won't do what you want
-function Node()
-    EmptyNode()
-end
-
-# Since length(node) is its number of children for iteration purposes
-# call the length of the text of the node textlength
-textlength(node::Node) = node._end - node.start + 1
-
-function show(io::IO, n::EmptyNode; indent=0)
-    show(io, typeof(n))
-end
-
-function print(io::IO, n::Node)
-    function reprint(n::Node, indent="")
-        print(io, indent, "<Node called '" * name(n) * "' matching '" * nodetext(n) *"'>\n")
-        for c in n.children
-            reprint(c, indent * "    ")
-        end
+# Convenience
+## Parent
+function Node(T::String, start::Int, _end::Int, children)
+    if _end >= start
+        ParentNode{symbol(T)}(start, _end, children)
+    else
+        ParentNode{symbol(T)}(start, children)
     end
-    reprint(n)
 end
 
-function show(io::IO, n::Node)
-    ret = {"s = $(repr(n.fulltext))"}
-
-    repr_children(n::EmptyNode; top_level=true) = string(typeof(n))
-# TODO: Handle the possiblity of match member here
-    function repr_children(n::Node; top_level=true)
-        "$(typeof(n))($(n.start), $(n._end), [" * join([repr_children(c; top_level=false) for c in n.children], ", ") * "]" * (n.match != nothing? ", " * repr(n.match) : "")* ")"
+## Child
+function Node(T::String, start::Int, _end::Int)
+    if _end >= start
+        ChildlessNode{symbol(T)}(start, _end)
+    else
+        ChildlessNode{symbol(T)}(start)
     end
-    push!(ret, repr_children(n))
-
-    show(io, join(ret, " ; "))
 end
 
-# This used to be my show function and I like it but
-# ditching it to match Parsimonious more closely so I can
-# pass his tests
-if false
-    function show_old(io::IO, n::Node; indent=0)
-    # Return a bit of code (though not an expression) that will recreate me.
-        print(io, "\n", repeat(".", indent))
-        print(io, typeof(n), "\"")
-        print(io, nodetext(n)[1:min(end,20)])
-        if length(nodetext(n)) > 100
-            print(io, "...", nodetext(n)[max(1,end-20):end])
-        end
-        print(io, "\"")
-        print(io, "(", n.start, ",", n._end, ")")
-        if length(n.children) > 0
-            print(io, "{")
-            for child in n.children
-                show(io, child, indent=indent+1)
-                print(io, ",")
-            end
-            print(io, "}")
-        end
+# Empty
+Node() = nothing
+
+# NodeText a tuple of Node and FullText
+type NodeText
+    node::MatchNode
+    text::String
+end
+
+# Copy with new "name"
+ParentNode(T, n::MatchNode) = ParentNode(T, n.match, n.children)
+ChildlessNode(T, n::MatchNode) = ChildlessNode(T, n.match)
+
+textlength(node::MatchNode) = length(node.match)
+length(ZeroLengthMatch) = 0
+length(OneOrMoreMatch) = match._end - match.start + 1
+
+pos(m::ZeroLengthMatch) = m.pos
+pos(m::OneOrMoreMatch) = m.start
+range(m::ZeroLengthMatch) = m.pos:m.pos-1
+range(m::OneOrMoreMatch) = m.start:m._end
+text(nt::NodeText) = nt.text[range(nt.node.match)]
+
+function goodnode_iprint(io::IO, n::MatchNode, t::String, indent::ASCIIString = "")
+    # TODO: Right justify the text
+    nodeinfo = "$(pos(n.match)) $(typeof(n))"
+    nodetext = lpad("'$(text(NodeText(n,t)))'\n", 80 - length(indent) - length(nodeinfo))
+    print(io, indent, nodeinfo, nodetext)
+end
+
+function iprint(io::IO, n::ParentNode, t::String, indent::ASCIIString = "")
+    goodnode_iprint(io, n, t, indent)
+    for c in n.children
+        iprint(io, c, t, indent * "  .  ")
     end
+end
+
+function iprint(io::IO, n::ChildlessNode, t::String, indent::ASCIIString = "")
+    goodnode_iprint(io, n, t, indent)
+end
+
+show(io::IO, nt::NodeText) = iprint(io, nt.node, nt.text)
+
+txt = "asdf;lkj"
+n1 = Node("string", 1, 8)
+n2 = Node("string", 1, 8, (Node("alpha", 1, 4), Node("sym", 5, 5), Node("not", 6,5), Node("alpha",6, 8)))
+for n in (n1, n2)
+    nt = NodeText(n, txt)
+    print(nt)
 end
 
 type VisitationError <:Exception
     node
+    fulltext
     exc
-    VisitationError(node, exc) = new(node, VisitationError)
 end
 
-VisitationError(node) = VisitationError(node, "VisitationError")
-
-"""Something went wrong while traversing a parse tree.
-
-This exception exists to augment an underlying exception with information
-about where in the parse tree the error occurred. Otherwise, it could be
-tiresome to figure out what went wrong; you'd have to play back the whole
-tree traversal in your head.
-
-"""
-# TODO: Make sure this is pickleable. Probably use @property pattern. Make
-# the original exc and node available on it if they don't cause a whole
-# raft of stack frames to be retained.
+#"""Something went wrong while traversing a parse tree.
+#
+#This exception exists to augment an underlying exception with information
+#about where in the parse tree the error occurred. Otherwise, it could be
+#tiresome to figure out what went wrong; you'd have to play back the whole
+#tree traversal in your head.
+#
+#"""
+## TODO: Make sure this is pickleable. Probably use @property pattern. Make
+## the original exc and node available on it if they don't cause a whole
+## raft of stack frames to be retained.
 
 function showerror(io::IO, e::VisitationError)
-    print(io, "visitation error")
+    println(io, "VISITATION ERROR")
     print(io, "Exception: ")
+    # TODO: showerror
     print(io, string(e.exc))
     print(io, "\nParse tree:\n")
-    print(io, prettily(e.node, e.node))
+    print(io, prettily(e.node, e.fulltext, e.node))
 end
 
-function name(n::Node)
+
+## Really type-parameter but we're using that as the node's "name"
+function name(n::AnyNode)
     s = string(typeof(n))
     if search(s, ':') == 0
         return ""
@@ -143,110 +159,178 @@ function name(n::Node)
     s[search(s, ':')+1:end-1]
 end
 
-# must each node cary the same reference to fulltext? Probably.
-# TODO: _end is the index of the last character in the end of the match.
-# It used to be the character after that but I'm refactoring so lots to change.
-function nodetext(n::Node)
+####################### TEST
+@show name(n2)
+####################### TEST
+
+# TODO: Refactor from: function nodetext(n::GoodNode)
+ function nodetext(n::MatchNode, fulltext::String)
 # TODO: not sure escape goes here or elsewhere or anywhere
 # TODO: I think this is maybe not doing unicode right. Or, it's partner spaceless_literal is cutting it off. Anyway, I need to install/configure urxvt and some nice colors before digging into that.
-
-    n.fulltext[n.start:n._end]
+    text(NodeText(n,fulltext))
 end
 
-isempty(::Node) = false
-isempty(::EmptyNode) = true
+########### TEST
+@show nodetext(n2, txt)
+########### TEST
 
-function isequal(a::Node, b::Node)
-    # Can I make the type system do this?
+isempty(::EmptyNode) = true
+isempty(::AnyNode) = false
+
+########### TEST
+@show isempty(n2)
+@show isempty(EmptyNode())
+@show isempty(nothing)
+@show isempty(Node("asdf", 1, 0))
+########### TEST
+
+# TODO: specialize for node types or generalize for DataTypes
+function base_isequal(a::MatchNode, b::MatchNode)
     typeof(a) == typeof(b) || return false
-    length(a) == length(b) || return false
-    is(a.fulltext, b.fulltext) || isequal(a.fulltext, b.fulltext) || return false
-    a.start == b.start && a._end == b._end || return false
-    a.match == b.match == nothing || begin
-        a.match.match.string == b.match.match.string
-        a.match.match.offset == b.match.match.offset
-        a.match.match.endof == b.match.match.endof
-    end || return false
-    for i in 1:length(a)
-        isequal(a.children[i], b.children[i]) || return false
+#    length(a) == length(b) || return false
+    a.match == b.match || return false
+    true
+end
+
+isequal(a::ChildlessNode, b::ChildlessNode) = base_isequal(a::MatchNode, b::MatchNode)
+isequal(a::ParentNode, b::ChildlessNode) = false
+isequal(a::ChildlessNode, b::ParentNode) = false
+
+function isequal(a::ParentNode, b::ParentNode)
+    base_isequal(a, b) || return false
+
+    for (childa, childb) in zip(a.children, b.children)
+        childa == childb || return false
     end
     true
 end
 
-function push!(node::AbstractNode, child::AbstractNode...)
-    push!(node.children, child...)
-end
+########### TEST
+@show n2 == n2
+@show Node("asdf", 1, 2) == Node("asdf", 1, 2)
+@show Node("asdf", 1, 3) != Node("asdf", 1, 2)
+@show Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2)
+@show Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
+@show Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) == Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
+@show Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) != EmptyNode()
+@show EmptyNode() == EmptyNode()
+########### TEST
+
+# TODO: Can't work with children a tuple. delete ... have to make a new tuple if necessary
+#function push!(node::ParentNode, child::MatchNode...)
+#    push!(node.children, child...)
+#end
 
 function indent(s,indstr="| ")
     return join([indstr * line for line in split(s, '\n')], "\n")
 end
 
-# Make an error string if the testnode is the errnode
+## Make an error string if the testnode is the errnode
 function errstring(testnode, errnode)
     errnode === testnode ? " <-- *** Error here ***" : ""
 end
 
-function prettily(node::EmptyNode, err::AbstractNode=Node())
-    return "<empty>$(errstring(node, err))"
+# I don't think empty nodes go in tree ... maybe delete this:
+function prettily(node::EmptyNode, fulltext, errnode::AnyNode=EmptyNode())
+    return "<empty>$(errstring(node, errnode))"
 end
 
-function escape_newline(s)
-    replace(s, r"\\n", "\\n")
-end
-
-function prettily{T}(node::Node{T}, err::AbstractNode=Node())
-    ret = ["<$(T) matching '$(nodetext(node))'>$(errstring(node, err))"]
+# function prettily{T}(node::Node{T}, err::Node=Node())
+function prettily{T}(node::ParentNode{T}, fulltext, errnode::AnyNode=EmptyNode())
+    ret = ["<$(T) matching '$(text(NodeText(node, fulltext)))'>$(errstring(node, errnode))"]
     for child in node
-        push!(ret, indent(prettily(child, err)))
+        push!(ret, indent(prettily(child, fulltext, errnode)))
     end
     return join(ret, "\n")
 end
 
+function prettily{T}(node::ChildlessNode{T}, fulltext, errnode::AnyNode=EmptyNode())
+    "<$(T) matching '$(text(NodeText(node,fulltext)))'>$(errstring(node, errnode))"
+end
+
+# TODO merge functions prettily and show which do very similar things
 function pprettily(x...)
     println(prettily(x...))
 end
 
-# Thanks base/iterator.jl
-# Iterate over Node children. I could turn this into the depth-first-search mechanism but that's not how Parsimonious does it.
-length(n::Node) = length(n.children)
-start(n::Node) = 1
-function next(n::Node, state)
+## Thanks base/iterator.jl
+## Iterate over Node children. I could turn this into the depth-first-search mechanism but that's not how Parsimonious does it.
+length(n::ParentNode) = length(n.children)
+start(n::ParentNode) = 1
+function next(n::ParentNode, state)
     n.children[state], state+1
 end
-done(n::Node, state) = state > length(n.children)
+done(n::ParentNode, state) = state > length(n.children)
 
+length(::EmptyNode) = 0
+length(::LeafNode) = 0  # Childless
+
+####################### TEST
+showerror(STDOUT, VisitationError(n2, txt, BoundsError()))
+[println(n) for n in n2]  # iteration
+####################### TEST
+
+#
 abstract NodeVisitor
+#
+## depth-first top-level visitation GO!
+## Means you can't overload visit with less than 3 paramaeters without
+## being very carefully. Maybe should give this it's own name like 'visit_all'
+## Though I do appreciate the slickness of naming every function 'visit'
+#
+## Currently handled in Grammars but TODO: move back here
+# Refactor: Pass around fulltext with every call. Seems fun.
+# TODO: For child nodes
 
-# depth-first top-level visitation GO!
-# Means you can't overload visit with less than 3 paramaeters without
-# being very carefully. Maybe should give this it's own name like 'visit_all'
-# Though I do appreciate the slickness of naming every function 'visit'
-function visit{T}(v::NodeVisitor, node::Node{T})
-    visited_children = [visit(v, n) for n in node]
+function visit_on_the_way_down(v::NodeVisitor, fulltext::String, node::ParentNode)
+    return [visit(v, fulltext, n) for n in node]
+end
+
+# No children
+visit_on_the_way_down(v::NodeVisitor, fulltext::String, node::LeafNode) = []
+
+function visit(v::NodeVisitor, fulltext::String, node::MatchNode)
+    @show v
+    @show fulltext
+    @show node
+    visited_children = visit_on_the_way_down(v, fulltext, node)
+    @show visited_children
     try
-        return visit(v, node, visited_children)  # ...
+        # TODO: Move this whole thing to tuples -- but not now
+        return visit(v, fulltext, node, visited_children)  # ...
     catch e
         if isa(e, VisitationError)
             rethrow(e)
         else
-            rethrow(VisitationError(node, e))
+            rethrow(VisitationError(node, fulltext, e))
         end
     end
 end
 
-# TODO: visit{T}(v::NodeVisitor, n::Node{T}  # here from Grammars.jl
-
-# generic_visit -- not implemented in base class as it were
-function visit{T}(v::NodeVisitor, n::Node{T}, visited_children)
+## generic_visit -- not implemented in base class as it were
+function visit{T}(v::NodeVisitor, n::ParentNode{T}, visited_children)
     # TODO: backtrace broken
-    # TODO: works on Linux, broken on OSX?
+    # TODO: backtrace works on Linux, broken on OSX only?
     println("Go implement visit(::$(string(typeof(v))), ::Node{$(name(n))})) right now!")
     error("Go implement visit(::$(string(typeof(v))), ::Node{$(name(n))})) right now!")
 end
 
-# conveniently replace a node with its own visited_children
-function lift_child(v::NodeVisitor, n::Node, visited_children)
-    return visited_children
+## conveniently replace a node with its own visited_children
+function lift_child(v::NodeVisitor, f::String, n::ParentNode, visited_children)
+    return visited_children[1]
 end
+
+####################### TEST
+type TestVisitor <: NodeVisitor end
+visit(v::TestVisitor, f::String, n::ParentNode{:lit}, visited_children) = lift_child(v,f,n,visited_children)
+visit(v::TestVisitor, f::String, n::ChildlessNode{:generic}, _) = nodetext(n, f)
+@show visit_on_the_way_down(TestVisitor(), "asdf", Node("lit", 1, 2)) == []
+@show visit(TestVisitor(), "asdf", Node("generic", 1, 2))
+@show nodetext(Node("generic", 1, 2), "asdf") == "as"
+@show nodetext(Node("generic", 1, 2), "asdf")
+@show visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
+@show visit(TestVisitor(), "asdf", Node("lit", 1, 2, (Node("generic", 1, 2),))) == "as"
+@test_throws visit(TestVisitor(), "asdf", Node("notimplemented", 1, 2)) == "as"
+####################### TEST
 
 end
