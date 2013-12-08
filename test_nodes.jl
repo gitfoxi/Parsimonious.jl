@@ -122,7 +122,9 @@ end
 # TODO: The difference between str and unicode in Julia? None?
 
 n = Node("text", "o hai", 1, 5)
-stringexample = "<Node called 'text' matching 'o hai'>"
+stringexample = "<Node called 'text' matching 'o hai'>\n"
+@show stringexample
+@show string(n)
 @test string(n) == stringexample
 
 
