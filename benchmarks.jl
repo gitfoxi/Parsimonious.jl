@@ -108,11 +108,11 @@ for i in 1:10
     # Disabling garbage collection during parse gets more consistent results and
     # gets the time down below 200ms. I think this is what's going on in the
     # Python benchmark as well so that accounts for some of the difference.
-    gc_disable()
+#    gc_disable()
     # @timed -> (return vale, time in seconds, memory in bytes)
     @time parse(grammar, json)
-    gc_enable()
-    gc()
+#    gc_enable()
+#    gc()
 end
 # @timeit :(parse(grammar, json)) :() 1000
 

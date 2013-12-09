@@ -74,7 +74,7 @@ function _match(expr::Expression, text::String, pos::Int, cache::Dict, err::Pars
     if !haskey(cache, key)
         # TODO: hottest of all hot spots here
         node = cache[key] = _uncached_match(expr, text, pos, cache, err)
-        # For fun, to see memory savings:
+        # For fun, to see memory savings replace above line with:
         # node = _uncached_match(expr, text, pos, cache, err)
         # Surprisingly, memory usage went up to 183M without the cache from 139M with.
         # Either way that is a lot of fucking memory allocated to parse a few kB of text.
@@ -344,6 +344,7 @@ function _uncached_match(self::ZeroOrMore, text::String, pos::Int, cache::Dict, 
     while true
         node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node) || textlength(node) == 0
+            length(children) == 0 && return Node(self.name, text, pos, new_pos - 1)
             return Node(self.name, text, pos, new_pos - 1, children)
         end
         push!(children, node)

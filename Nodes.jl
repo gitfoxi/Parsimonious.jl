@@ -3,7 +3,7 @@ module Nodes
 using Base.Test
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, ChildlessNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
+export NodeText, length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, ChildlessNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
 
 # I don't think EmptyNodes ever go in the tree. They are just used as a sort of
 # error message. You return an EmptyNode when you fail to match, for example.
@@ -160,7 +160,7 @@ function name(n::AnyNode)
 end
 
 ####################### TEST
-@show name(n2)
+@test name(n2) == "string"
 ####################### TEST
 
 # TODO: Refactor from: function nodetext(n::GoodNode)
@@ -172,16 +172,17 @@ end
 
 ########### TEST
 @show nodetext(n2, txt)
+@test nodetext(n2, txt) == "asdf;lkj"
 ########### TEST
 
 isempty(::EmptyNode) = true
 isempty(::AnyNode) = false
 
 ########### TEST
-@show isempty(n2)
-@show isempty(EmptyNode())
-@show isempty(nothing)
-@show isempty(Node("asdf", 1, 0))
+@test isempty(n2) == false
+@test isempty(EmptyNode()) == true
+@test isempty(nothing) == true
+@test isempty(Node("asdf", 1, 0)) == false
 ########### TEST
 
 # TODO: specialize for node types or generalize for DataTypes
@@ -206,14 +207,14 @@ function isequal(a::ParentNode, b::ParentNode)
 end
 
 ########### TEST
-@show n2 == n2
-@show Node("asdf", 1, 2) == Node("asdf", 1, 2)
-@show Node("asdf", 1, 3) != Node("asdf", 1, 2)
-@show Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2)
-@show Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
-@show Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) == Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
-@show Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) != EmptyNode()
-@show EmptyNode() == EmptyNode()
+@test n2 == n2
+@test Node("asdf", 1, 2) == Node("asdf", 1, 2)
+@test Node("asdf", 1, 3) != Node("asdf", 1, 2)
+@test Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2)
+@test Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
+@test Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) == Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
+@test Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) != EmptyNode()
+@test EmptyNode() == EmptyNode()
 ########### TEST
 
 # TODO: Can't work with children a tuple. delete ... have to make a new tuple if necessary
@@ -237,7 +238,7 @@ end
 
 # function prettily{T}(node::Node{T}, err::Node=Node())
 function prettily{T}(node::ParentNode{T}, fulltext, errnode::AnyNode=EmptyNode())
-    ret = ["<$(T) matching '$(text(NodeText(node, fulltext)))'>$(errstring(node, errnode))"]
+    ret = ["<$(T) matching '$(escape_string(text(NodeText(node, fulltext))))'>$(errstring(node, errnode))"]
     for child in node
         push!(ret, indent(prettily(child, fulltext, errnode)))
     end
@@ -245,7 +246,7 @@ function prettily{T}(node::ParentNode{T}, fulltext, errnode::AnyNode=EmptyNode()
 end
 
 function prettily{T}(node::ChildlessNode{T}, fulltext, errnode::AnyNode=EmptyNode())
-    "<$(T) matching '$(text(NodeText(node,fulltext)))'>$(errstring(node, errnode))"
+    "<$(T) matching '$(escape_string(text(NodeText(node,fulltext))))'>$(errstring(node, errnode))"
 end
 
 # TODO merge functions prettily and show which do very similar things
@@ -290,11 +291,7 @@ end
 visit_on_the_way_down(v::NodeVisitor, fulltext::String, node::LeafNode) = []
 
 function visit(v::NodeVisitor, fulltext::String, node::MatchNode)
-    @show v
-    @show fulltext
-    @show node
     visited_children = visit_on_the_way_down(v, fulltext, node)
-    @show visited_children
     try
         # TODO: Move this whole thing to tuples -- but not now
         return visit(v, fulltext, node, visited_children)  # ...
@@ -324,12 +321,11 @@ end
 type TestVisitor <: NodeVisitor end
 visit(v::TestVisitor, f::String, n::ParentNode{:lit}, visited_children) = lift_child(v,f,n,visited_children)
 visit(v::TestVisitor, f::String, n::ChildlessNode{:generic}, _) = nodetext(n, f)
-@show visit_on_the_way_down(TestVisitor(), "asdf", Node("lit", 1, 2)) == []
-@show visit(TestVisitor(), "asdf", Node("generic", 1, 2))
-@show nodetext(Node("generic", 1, 2), "asdf") == "as"
-@show nodetext(Node("generic", 1, 2), "asdf")
-@show visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
-@show visit(TestVisitor(), "asdf", Node("lit", 1, 2, (Node("generic", 1, 2),))) == "as"
+@test visit_on_the_way_down(TestVisitor(), "asdf", Node("lit", 1, 2)) == []
+@test visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
+@test nodetext(Node("generic", 1, 2), "asdf") == "as"
+@test visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
+@test visit(TestVisitor(), "asdf", Node("lit", 1, 2, (Node("generic", 1, 2),))) == "as"
 @test_throws visit(TestVisitor(), "asdf", Node("notimplemented", 1, 2)) == "as"
 ####################### TEST
 
