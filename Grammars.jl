@@ -2,9 +2,6 @@
 module Grammars
 
 
-reload("Util.jl")
-reload("Nodes.jl")
-reload("Expressions.jl")
 using Util
 using Nodes
 using Expressions
@@ -177,7 +174,7 @@ function _expressions_from_rules(rule_syntax::String)
 
     # Turn the parse tree into a map of expressions:
     rule_tree = parse(rules, rule_syntax)
-    println(rule_tree)
+#    println(rule_tree)
     exprs, default_rule = visit(RuleVisitor(), rule_syntax, rule_tree)
     return exprs, default_rule
 end
@@ -186,12 +183,12 @@ type RuleVisitor <: NodeVisitor end
 
 # generic_visit
 function visit(v::RuleVisitor, f::String, n::LeafNode)
-    warn("generic call for node " * string(typeof(n)) * " -- " * nodetext(n, f))
+    # warn("generic call for node " * string(typeof(n)) * " -- " * nodetext(n, f))
     return n
 end
 
 function visit(v::RuleVisitor, f::String, n::ParentNode, visited_children)
-    warn("generic call for node " * string(typeof(n)) * " -- " * nodetext(n, f))
+    # warn("generic call for node " * string(typeof(n)) * " -- " * nodetext(n, f))
     return visited_children
 end
 
@@ -272,18 +269,12 @@ end
 
 function visit(v::RuleVisitor, f::String, n::ParentNode{:reference}, visited_children)
     label, not_equals = visited_children
-    println("LAZY REFERENCE TO: ", label)
+    # println("LAZY REFERENCE TO: ", label)
     LazyReference("", label)
 end
 
 function visit(v::RuleVisitor, f::String, n::ParentNode{:regex}, visited_children)
     tilde, literal, flags, _ = visited_children
-    try
-        println("LITERAL: " * literal.literal)
-    catch
-        error("LITERAL: " * dump(visited_children))
-    end
-
     pattern = literal.literal
     flags = lowercase(nodetext(flags, f))
     Expressions.Regex(pattern, options=flags)
@@ -337,9 +328,7 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
                 reffed_expr = rule_map[label]
             catch e
                 if isa(e, KeyError)
-                    # TODO: UndefinedLabel type
-                    # throw(UndefinedLabel(expr))
-                    println(rule_map)
+                    # println(rule_map)
                     throw(UndefinedLabel(expr))
                 end
                 rethrow(e)

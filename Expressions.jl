@@ -4,7 +4,7 @@ module Expressions
 import Base: match, rsearch, length, showerror, isequal, show
 using Nodes
 using Util
-export LazyReference, unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal, @p_str, @p_mstr, show, as_rule, match
+export _Compound, LazyReference, unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal, @p_str, @p_mstr, show, as_rule, match
 
 abstract Expression # -ism
 abstract ParseException

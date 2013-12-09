@@ -15,7 +15,9 @@ Suggestions for Benchmark.jl
 
 Should I be carrying around empty children lists or have a node type without a children (or without match)
 
+Make fulltext a member of all NodeVisitor (and maybe Expression?) so you don't have to keep passing it to visit()
 
+Finish tuple conversion of Node and calls from Expression
 
 
 Stupid Ideas

@@ -12,7 +12,6 @@ using Base.Test
 using Nodes
 using Expressions
 using Grammars
-using Util
 
 import Expressions.parse
 import Expressions.show
@@ -376,7 +375,7 @@ end
 @test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, [Node("", "foo", 1, 0), Node("", "foo", 1, 3)])
 @test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "barfoo") == Node("", "barfoo", 1, 6, [Node("", "barfoo", 1, 3, [Node("", "barfoo", 1, 3)]), Node("", "barfoo", 4, 6)])
 @show parse(ZeroOrMore(Literal("bar")), "")
-@test parse(ZeroOrMore(Literal("bar")), "") == Node("", "", 1, 0, ()) # Again, not sure if it should have children
+@test parse(ZeroOrMore(Literal("bar")), "") == Node("", "", 1, 0) # Again, not sure if it should have children
 @test parse(ZeroOrMore(Literal("bar")), "bar") == Node("", "bar", 1, 3, [Node("", "bar", 1, 3)])
 @test parse(ZeroOrMore(Literal("bar")), "barbar") == Node("", "barbar", 1, 6, [Node("", "barbar", 1, 3), Node("", "barbar", 4, 6)])
 @test_throws parse(OneOrMore(Literal("bar")), "")

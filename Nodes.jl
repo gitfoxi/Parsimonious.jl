@@ -1,9 +1,8 @@
 
 module Nodes
-using Base.Test
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export NodeText, length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, ChildlessNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
+export name, NodeText, length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, ChildlessNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
 
 # I don't think EmptyNodes ever go in the tree. They are just used as a sort of
 # error message. You return an EmptyNode when you fail to match, for example.
@@ -114,14 +113,6 @@ end
 
 show(io::IO, nt::NodeText) = iprint(io, nt.node, nt.text)
 
-txt = "asdf;lkj"
-n1 = Node("string", 1, 8)
-n2 = Node("string", 1, 8, (Node("alpha", 1, 4), Node("sym", 5, 5), Node("not", 6,5), Node("alpha",6, 8)))
-for n in (n1, n2)
-    nt = NodeText(n, txt)
-    print(nt)
-end
-
 type VisitationError <:Exception
     node
     fulltext
@@ -159,36 +150,16 @@ function name(n::AnyNode)
     s[search(s, ':')+1:end-1]
 end
 
-####################### TEST
-@test name(n2) == "string"
-####################### TEST
-
-# TODO: Refactor from: function nodetext(n::GoodNode)
  function nodetext(n::MatchNode, fulltext::String)
-# TODO: not sure escape goes here or elsewhere or anywhere
-# TODO: I think this is maybe not doing unicode right. Or, it's partner spaceless_literal is cutting it off. Anyway, I need to install/configure urxvt and some nice colors before digging into that.
     text(NodeText(n,fulltext))
 end
-
-########### TEST
-@show nodetext(n2, txt)
-@test nodetext(n2, txt) == "asdf;lkj"
-########### TEST
 
 isempty(::EmptyNode) = true
 isempty(::AnyNode) = false
 
-########### TEST
-@test isempty(n2) == false
-@test isempty(EmptyNode()) == true
-@test isempty(nothing) == true
-@test isempty(Node("asdf", 1, 0)) == false
-########### TEST
-
-# TODO: specialize for node types or generalize for DataTypes
 function base_isequal(a::MatchNode, b::MatchNode)
     typeof(a) == typeof(b) || return false
-#    length(a) == length(b) || return false
+    length(a) == length(b) || return false
     a.match == b.match || return false
     true
 end
@@ -205,17 +176,6 @@ function isequal(a::ParentNode, b::ParentNode)
     end
     true
 end
-
-########### TEST
-@test n2 == n2
-@test Node("asdf", 1, 2) == Node("asdf", 1, 2)
-@test Node("asdf", 1, 3) != Node("asdf", 1, 2)
-@test Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2)
-@test Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
-@test Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) == Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
-@test Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) != EmptyNode()
-@test EmptyNode() == EmptyNode()
-########### TEST
 
 # TODO: Can't work with children a tuple. delete ... have to make a new tuple if necessary
 #function push!(node::ParentNode, child::MatchNode...)
@@ -266,11 +226,6 @@ done(n::ParentNode, state) = state > length(n.children)
 length(::EmptyNode) = 0
 length(::LeafNode) = 0  # Childless
 
-####################### TEST
-showerror(STDOUT, VisitationError(n2, txt, BoundsError()))
-[println(n) for n in n2]  # iteration
-####################### TEST
-
 #
 abstract NodeVisitor
 #
@@ -317,20 +272,8 @@ function lift_child(v::NodeVisitor, f::String, n::ParentNode, visited_children)
     return visited_children[1]
 end
 
-####################### TEST
-type TestVisitor <: NodeVisitor end
-visit(v::TestVisitor, f::String, n::ParentNode{:lit}, visited_children) = lift_child(v,f,n,visited_children)
-visit(v::TestVisitor, f::String, n::ChildlessNode{:generic}, _) = nodetext(n, f)
-@test visit_on_the_way_down(TestVisitor(), "asdf", Node("lit", 1, 2)) == []
-@test visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
-@test nodetext(Node("generic", 1, 2), "asdf") == "as"
-@test visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
-@test visit(TestVisitor(), "asdf", Node("lit", 1, 2, (Node("generic", 1, 2),))) == "as"
-@test_throws visit(TestVisitor(), "asdf", Node("notimplemented", 1, 2)) == "as"
-####################### TEST
-
 # Refactoring convenience
-# TODO: test
+# TODO: test or remove
 _end(m::OneOrMoreMatch) = m._end
 _end(m::ZeroLengthMatch) = m.pos - 1
 _end(n::MatchNode) = _end(n.match)

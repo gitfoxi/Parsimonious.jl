@@ -4,7 +4,7 @@
 module test_nodes
 
 using Base.Test
-reload("Nodes.jl")  # for repl debugging reload things in the order they would call each other
+# reload("Nodes.jl")  # for repl debugging reload things in the order they would call each other
 using Nodes
 import Nodes.visit  # for overloading
 import Nodes: errstring # for testing internal stuff
@@ -219,5 +219,57 @@ type SomeVisitor <: NodeVisitor end
 @test textlength(Node("foo","",1,0)) == 0
 @test textlength(Node("foo","f", 1,1)) == 1
 @test textlength(Node("foo","foo", 1,3)) == 3
+
+txt = "asdf;lkj"
+n1 = Node("string", 1, 8)
+n2 = Node("string", 1, 8, (Node("alpha", 1, 4), Node("sym", 5, 5), Node("not", 6,5), Node("alpha",6, 8)))
+for n in (n1, n2)
+    nt = NodeText(n, txt)
+    print(nt)
+end
+
+####################### TEST
+@test name(n2) == "string"
+####################### TEST
+
+########### TEST
+@test nodetext(n2, txt) == "asdf;lkj"
+########### TEST
+
+########### TEST
+@test isempty(n2) == false
+@test isempty(EmptyNode()) == true
+@test isempty(nothing) == true
+@test isempty(Node("asdf", 1, 0)) == false
+########### TEST
+
+
+########### TEST
+@test n2 == n2
+@test Node("asdf", 1, 2) == Node("asdf", 1, 2)
+@test Node("asdf", 1, 3) != Node("asdf", 1, 2)
+@test Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2)
+@test Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
+@test Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) == Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
+@test Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) != EmptyNode()
+@test EmptyNode() == EmptyNode()
+########### TEST
+
+####################### TEST
+showerror(STDOUT, VisitationError(n2, txt, BoundsError()))
+[println(n) for n in n2]  # iteration
+####################### TEST
+
+####################### TEST
+type TestVisitor <: NodeVisitor end
+visit(v::TestVisitor, f::String, n::ParentNode{:lit}, visited_children) = lift_child(v,f,n,visited_children)
+visit(v::TestVisitor, f::String, n::ChildlessNode{:generic}, _) = nodetext(n, f)
+@test Nodes.visit_on_the_way_down(TestVisitor(), "asdf", Node("lit", 1, 2)) == []
+@test visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
+@test nodetext(Node("generic", 1, 2), "asdf") == "as"
+@test visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
+@test visit(TestVisitor(), "asdf", Node("lit", 1, 2, (Node("generic", 1, 2),))) == "as"
+@test_throws visit(TestVisitor(), "asdf", Node("notimplemented", 1, 2)) == "as"
+####################### TEST
 
 end
