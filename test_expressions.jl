@@ -1,6 +1,4 @@
 
-# I'm a module so that I can re-include Expressions every time so I get updates to the code
-# But it still doesn't seem to work. :(
 module test_expressions
 
 # reload("Nodes.jl")
@@ -8,30 +6,23 @@ module test_expressions
 # reload("Grammars.jl")
 
 using Base.Test
-# using Base.typeof
 using Nodes
 using Expressions
 using Grammars
-
-import Expressions.parse
-import Expressions.show
-
 
 type TestExpression <: Expression
     name
 end
 
-
 # Try examples that will work on both Boot Grammar and Rule Grammar on both
 boot_gr, rule_gr = Grammars.boot_grammar(), Grammar()
 for (rules, file) in zip((boot_gr, rule_gr), ("boot_expr", "rule_expr"))
-    bio = open(file *".txt", "w")
-    print(bio, rules.default_rule)  # print boot_gr also for infinite loop
-    close(bio)
+    print(IOString(), rules.default_rule)  # print no infinite loop
 end
 
-# println(rule_gr)  # print rule_gr for infinite loop in term / not_term
-rule_gr_gr = parse(lookup(rule_gr, "rules"), Grammars.rule_syntax)
+# parse / match don't crash
+parse(lookup(rule_gr, "rules"), Grammars.rule_syntax)
+match(lookup(rule_gr, "rules"), Grammars.rule_syntax)
 
 # function wrap so I can time running independent of compilation
 # function go()
@@ -43,8 +34,6 @@ end
 # -- Length Tests --
 
 # Literal tests
-@show match(Literal("hello"), "ehello", 2)
-@show length(match(Literal("hello"), "ehello", 2))
 @test len_eq(match(Literal("hello"), "ehello", 2), 5)
 # Not sure if it's possible to have a match-nothing literal
 # @test len_eq(match(Literal(""), ""), 0)
@@ -134,8 +123,7 @@ text = ""
 #        """Test the 0 case of ``ZeroOrMore``; it should still return a node."""
 expr = ZeroOrMore(Literal("a"), name="zero")
 text = ""
-@show match(expr, text)
-@show Node("zero", text, 1, 0)
+@test match(expr, text) == Node("zero", 1, 0)
 #match(expr,text) => ParentNode{:zero}(ZeroLengthMatch(1),())
 #Node("zero",text,1,0) => ChildlessNode{:zero}(ZeroLengthMatch(1))
 #Not sure if it should be Parent or Childless
@@ -197,7 +185,6 @@ for g in [rule_gr]
         @test e.pos == 7
         @test e.expr == lookup(grammar, "close_parens")
         @test e.text == text
-        @show unicode(e)
         @test unicode(e) == "Rule 'close_parens' didn't match at '!!' (line 1, column 7)."
     end
 
@@ -255,7 +242,6 @@ grammar = Grammar(rule_gr, """sequence = 'chitty' (' ' 'bang')+""")
 try
     parse(grammar, "chitty bangbang")
 catch error
-    @show unicode(error)
     @test unicode(error) == "Rule 'sequence' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with 'bang' (line 1, column 11)."
 end
 

@@ -1,6 +1,4 @@
-Name modules with capital first letter like Nodes.jl. Git doesn't want to lt me do this.
-
-What to do with the cache between parsing texts? Is it good to keep? Mess things up? Grow without bound?
+Cache works the same as LPEG?
 
 Really untangle the escaping issue so you can give good instructions on how to
 make a literal doublequote and a literal backslash.
@@ -9,15 +7,15 @@ Make sure I get the same number of cache hits as Python
 
 Parallel?
 
-Suggestions for Benchmark.jl
-* mean is more interesting than average
-* need to make sure compiler can't optimize you our by providing random data and using the result (print to /dev/null)
-
-Should I be carrying around empty children lists or have a node type without a children (or without match)
-
 Make fulltext a member of all NodeVisitor (and maybe Expression?) so you don't have to keep passing it to visit()
 
 Finish tuple conversion of Node and calls from Expression
+
+LPEG-like declaritive interface
+
+Benchmark against: Parsley, LPEG, PEG.js
+
+Clean style like `base/pkg`
 
 
 Stupid Ideas
@@ -27,3 +25,21 @@ OnOf optimization -- when you match, if it's not the first option then swap it w
 This way, a more frequently matched option will be checked first.
 Of course, this is stupid because in PEG it does matter what order things match in. Derp
 
+
+Suggestions for Benchmark.jl
+----------------------------
+
+* mean is more interesting than average
+* need to make sure compiler can't optimize you our by providing random data and using the result (print to /dev/null)
+
+
+Suggestions for Profiling
+-------------------------
+
+* Sort by height (depth?) from bottom (top?) of stack
+
+
+Suggestions for Julia
+---------------------
+
+Arbitrary quotes like Perl

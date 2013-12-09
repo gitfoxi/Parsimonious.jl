@@ -1,15 +1,14 @@
 
 module Grammars
 
-
 using Util
 using Nodes
 using Expressions
-import Nodes.visit
+import Nodes.visit # for overloading NodeVisitor
 
 export Grammar, lookup, rule_grammar, parse, unicode, match
 
-# Have to import everything you want to overload and export
+# You have to import everything you want to overload and export
 import Expressions: parse, unicode, match
 
 type Grammar
@@ -20,9 +19,9 @@ end
 
 # TODO: Grammar <: Associative
 # for now, a lookup method
-
 lookup(g::Grammar, key) = g.exprs[key]
 
+# TODO: Boot strap on import
 # As an interface, calling with similar parameters in a different order could
 # not be more fucking confusing. TODO: sort it out
 function Grammar(rule_grammar::Grammar, rule_syntax::String;
@@ -32,31 +31,15 @@ function Grammar(rule_grammar::Grammar, rule_syntax::String;
     Grammar(rule_syntax, default_rule, exprs)
 end
 
-function Grammar(rule_syntax::String)
-    Grammar(rule_grammar, rule_syntax)
-end
-
-function parse(grammar::Grammar, text::String, pos=1)
-    # TODO Expressions.parse to support pos parameter
-    parse(grammar.default_rule, text, pos)
-end
-
-function match(grammar::Grammar, text::String, pos=1)
-    # TODO Expressions.parse to support pos parameter
-    match(grammar.default_rule, text, pos)
-end
-
-function _expressions_from_rules(grammar::Grammar, rules::String)
-    tree = parse(grammar, rules)
-    exprs, first_rule = visit(RuleVisitor(), rules, tree)
-
-    exprs, first_rule
-end
+Grammar(rule_syntax::String) = Grammar(rule_grammar, rule_syntax)
 
 function Grammar() # Bootstrapping
     exprs, default_rule = _expressions_from_rules(rule_syntax)
     Grammar(rule_syntax, default_rule, exprs)
 end
+
+parse(grammar::Grammar, text::String, pos=1) = parse(grammar.default_rule, text, pos)
+match(grammar::Grammar, text::String, pos=1) = match(grammar.default_rule, text, pos)
 
 rule_syntax = p"""
     # Ignored things (represented by _) are typically hung off the end of the
@@ -68,10 +51,10 @@ rule_syntax = p"""
     literal = spaceless_literal _
 
     # So you can't spell a regex like `~"..." ilm`:
-    """ * """
+    """ * """ # TODO: barf backslash handling
     spaceless_literal = ~"\\"[^\\"\\\\]*(?:\\\\.[^\\"\\\\]*)*\\""is /
                         ~"'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'"is
-    """ * p"""
+    """ * p""" # /barf
     expression = ored / sequence / term
     or_term = "/" _ term
     ored = term or_term+
@@ -132,7 +115,6 @@ function boot_expressions()
 
     # TODO: Is there a way to get a list of all of the local variables so
     # I don't have to make this dictionary manually?
-
     #exprnames = split("""
     #    comment meaninglessness _ equals label reference quantifier
     #    spaceless_literal literal regex atom quantified term not_term
@@ -169,12 +151,15 @@ function boot_grammar()
     Grammar("", exprs["rules"], exprs)
 end
 
+function _expressions_from_rules(grammar::Grammar, rules::String)
+    tree = parse(grammar, rules)
+    visit(RuleVisitor(), rules, tree)
+end
+
+# make boot grammar
 function _expressions_from_rules(rule_syntax::String)
     rules = boot_expressions()["rules"]
-
-    # Turn the parse tree into a map of expressions:
     rule_tree = parse(rules, rule_syntax)
-#    println(rule_tree)
     exprs, default_rule = visit(RuleVisitor(), rule_syntax, rule_tree)
     return exprs, default_rule
 end
@@ -182,15 +167,8 @@ end
 type RuleVisitor <: NodeVisitor end
 
 # generic_visit
-function visit(v::RuleVisitor, f::String, n::LeafNode)
-    # warn("generic call for node " * string(typeof(n)) * " -- " * nodetext(n, f))
-    return n
-end
-
-function visit(v::RuleVisitor, f::String, n::ParentNode, visited_children)
-    # warn("generic call for node " * string(typeof(n)) * " -- " * nodetext(n, f))
-    return visited_children
-end
+visit(v::RuleVisitor, f::String, n::LeafNode) = n
+visit(v::RuleVisitor, f::String, n::ParentNode, visited_children) = visited_children
 
 # TODO: tuples not arrays for visited_children
 visit(v::RuleVisitor, f::String, n::ParentNode{:expression}, visited_children) = visited_children[1]
@@ -209,7 +187,6 @@ end
 
 function visit(v::RuleVisitor, f::String, n::ParentNode{:quantified}, visited_children)
     atom, quantifier = visited_children
-
     quantifier = nodetext(quantifier, f)[1]
     if quantifier == '?'
         return Optional(atom)
@@ -233,23 +210,13 @@ end
 
 function visit(v::RuleVisitor, f::String, n::ParentNode{:rule}, visited_children)
     label, equals, expression = visited_children
-
-    # Apply label.label as name to copy of expression
-    try
-        expression.name = label
-        return expression
-    except
-        error(xdata(label))
-    end
+    expression.name = label
+    expression
 end
 
 function visit(v::RuleVisitor, f::String, n::ParentNode{:sequence}, visited_children)
     term, terms = visited_children
-    try
-        return Sequence(term, terms...)
-    except
-        error(xdata(term))
-    end
+    Sequence(term, terms...)
 end
 
 function visit(v::RuleVisitor, f::String, n::ParentNode{:ored}, visited_children)
@@ -269,7 +236,6 @@ end
 
 function visit(v::RuleVisitor, f::String, n::ParentNode{:reference}, visited_children)
     label, not_equals = visited_children
-    # println("LAZY REFERENCE TO: ", label)
     LazyReference("", label)
 end
 
@@ -285,31 +251,22 @@ function visit(v::RuleVisitor, f::String, n::ParentNode{:literal}, visited_child
     spaceless_literal
 end
 
-type UndefinedLabel <: Exception
-    label
-end
+type UndefinedLabel <: Exception label end
 
-function showerror(io::IO, e::UndefinedLabel)
-    print(io,"The label $(e.label) was never defined.")
-end
-
+showerror(io::IO, e::UndefinedLabel) = print(io,"The label $(e.label) was never defined.")
 
 function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
-#    println("RESOLVE REFS")
-#    @show (rule_map, expr, unwalked_names, walking_names)
+    #Return an expression with all its lazy references recursively
+    #resolved.
 
-    """Return an expression with all its lazy references recursively
-    resolved.
+    #Resolve any lazy references in the expression ``expr``, recursing into
+    #all subexpressions. Populate ``rule_map`` with any other rules (named
+    #expressions) resolved along the way. Remove from ``unwalked_names`` any
+    #which were resolved.
 
-    Resolve any lazy references in the expression ``expr``, recursing into
-    all subexpressions. Populate ``rule_map`` with any other rules (named
-    expressions) resolved along the way. Remove from ``unwalked_names`` any
-    which were resolved.
+    #:arg walking_names: The stack of labels we are currently recursing
+    #    through. This prevents infinite recursion for circular refs.
 
-    :arg walking_names: The stack of labels we are currently recursing
-        through. This prevents infinite recursion for circular refs.
-
-    """
     # If it's a top-level (named) expression and we've already walked it,
     # don't walk it again:
     exprname = expr.name
@@ -360,7 +317,6 @@ end
 # return dictionary of expressions and a rule name
 function visit(v::RuleVisitor, f::String, n::ParentNode{:rules}, visited_children)
     _, rules = visited_children
-
     rule_map = {expr.name => expr for expr in rules}
     unwalked_names = Set(collect(keys(rule_map))...)
     while !isempty(unwalked_names)
@@ -372,28 +328,14 @@ function visit(v::RuleVisitor, f::String, n::ParentNode{:rules}, visited_childre
     return rule_map, rules[1]
 end
 
-# TODO: Need a function for escaping \n, \t etc
-# TODO: unicode
-function visit(v::RuleVisitor, f::String, n::ParentNode{:spaceless_literal}, _)
-    # pause("SPACELESS: " * nodetext(n, f) * " _:" * string(_) )
-    Literal(nodetext(n, f)[2:end-1])
-end
+visit(v::RuleVisitor, f::String, n::ParentNode{:spaceless_literal}, _) = Literal(nodetext(n, f)[2:end-1])
+visit(v::RuleVisitor, f::String, n::ChildlessNode{:spaceless_literal}) = Literal(nodetext(n, f)[2:end-1])
 
-function visit(v::RuleVisitor, f::String, n::ChildlessNode{:spaceless_literal})
-    Literal(nodetext(n, f)[2:end-1])
-end
+rule_grammar = Grammar()  # Level 1 -- Bootstrap grammar parses rule_symtax
+rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 2 -- generated rule_grammar parses rule_syntax
+rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 3 -- re-generated rule_grammar parses rule_syntax
 
-rule_grammar = Grammar()  # Bootstrapping
-rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 2
-rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 3
-#@show rule_grammar
-#g = Grammar("""
-#            polite_greeting = greeting ', my good ' title
-#            greeting        = 'Hi' / 'Hello'
-#            title           = 'madam' / 'sir'
-#            """)
-#@show g
-
+# TODO: Stupid name
 function unicode(g::Grammar)
     """Return a rule string that, when passed to the constructor, would
     reconstitute the grammar."""
@@ -407,28 +349,4 @@ function unicode(g::Grammar)
     join([sexprs], "\n")
 end
 
-# Test
-#
-# function visit(v::RuleVisitor, n::Node{:rules}, _, rules)
-# returns dictionary of expressions and a rule name
-
-#_ = Regex("\\s*", name="_")
-#lc = Regex("[a-z]+", name="lc")
-#lab = Sequence(lc, _)
-#equals = Sequence(Literal("="), _, name="equals")
-#rule = Sequence(lab, equals, lab, name="rule")
-#rules = Sequence(_, OneOrMore(rule), name="rules")
-#mytext = " rul=asdf foo=bsdf bar=csdf"
-#node = parse(rules, mytext)
-## rules, default_rule = visit(RuleVisitor(), node)
-#@show typeof(node)
-#for visitret in visit(RuleVisitor(), node)
-#    @show visitret
-#end
-#rules, default_rule = visit(RuleVisitor(), node)
-#@show rules, default_rule
-#@test is(default_rule, String)
-#@test is(rules, Dict)
-
-
-end
+end # module
