@@ -21,7 +21,6 @@ end
 # for now, a lookup method
 lookup(g::Grammar, key) = g.exprs[key]
 
-# TODO: Boot strap on import
 # As an interface, calling with similar parameters in a different order could
 # not be more fucking confusing. TODO: sort it out
 function Grammar(rule_grammar::Grammar, rule_syntax::String;

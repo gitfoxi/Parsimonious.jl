@@ -17,6 +17,12 @@ Benchmark against: Parsley, LPEG, PEG.js
 
 Clean style like `base/pkg`
 
+Fixed-length, range-length match
+
+Streaming
+
+Capture #9000000004asdf
+
 
 Stupid Ideas
 ------------

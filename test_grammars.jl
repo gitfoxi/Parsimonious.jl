@@ -3,7 +3,7 @@ module test_grammars
 
 #reload("Nodes.jl")
 #reload("Expressions.jl")
-reload("Grammars.jl")
+#reload("Grammars.jl")
 using Base.Test
 
 using Grammars
