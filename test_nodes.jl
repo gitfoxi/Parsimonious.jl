@@ -126,8 +126,8 @@ stringexample = "1 ChildlessNode{:text}                                         
 
 s = "hai ö"
 boogie = "böogie"
-n = Node(boogie, s, 1, 3, [
-        Node("", s, 4, 3), Node("", s, 5, 4)])
+n = Node(boogie, s, 1, 3, (
+        Node("", s, 4, 3), Node("", s, 5, 4)))
 shouldbe = "\"s = \\\"hai ö\\\" ; ParentNode{:böogie}(1, 3, [Node{:}(4, 3), Node{:}(5, 4)])\""
 # TODO: who gives a fuck?
 #@test repr(n) == shouldbe
@@ -174,7 +174,7 @@ nct = Node("myexpr", copytext, 5, 8)
 
 # add some children to n2
 # Thinking of making children immutable ... yeah, that should be fine
-n2 = Node("myexpr", mytext, 5, 8, [n3, n3, n3, n3])
+n2 = Node("myexpr", mytext, 5, 8, (n3, n3, n3, n3))
 
 # no longer equal
 @test !isequal(n, n2)

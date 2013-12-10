@@ -230,7 +230,7 @@ function _uncached_match(sequence::Sequence, text::String, pos::Int, cache::Dict
         length_of_sequence += textlength(node)
     end
     # Hooray! We got through all the members!
-    return Node(sequence.name, text, pos, pos + length_of_sequence - 1, children)
+    return Node(sequence.name, text, pos, pos + length_of_sequence - 1, tuple(children...))
 end
 
 function _as_rhs(sequence::Sequence)
@@ -252,7 +252,7 @@ function _uncached_match(oneof::OneOf, text::String, pos::Int, cache::Dict, err:
     for (i, m) in enumerate(members)
         node = _match(m, text, pos, cache, err)
         if !isempty(node)
-            return Node(oneof.name, text, pos, _end(node), [node])
+            return Node(oneof.name, text, pos, _end(node), (node,))
         end
     end
     return EmptyNode()
@@ -321,7 +321,7 @@ function _uncached_match(self::Optional, text::String, pos::Int, cache::Dict, er
     if isempty(node)
         return Node(self.name, text, pos, pos - 1)
     end
-    return Node(self.name, text, pos, _end(node), [node])
+    return Node(self.name, text, pos, _end(node), (node,))
 end
 
 function _as_rhs(e::Optional)
@@ -345,7 +345,7 @@ function _uncached_match(self::ZeroOrMore, text::String, pos::Int, cache::Dict, 
         node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node) || textlength(node) == 0
             length(children) == 0 && return Node(self.name, text, pos, new_pos - 1)
-            return Node(self.name, text, pos, new_pos - 1, children)
+            return Node(self.name, text, pos, new_pos - 1, tuple(children...))
         end
         push!(children, node)
         new_pos += textlength(node)
@@ -385,7 +385,7 @@ function _uncached_match(self::OneOrMore, text::String, pos::Int, cache::Dict, e
         new_pos += len
     end
     if length(children) >= self._min
-        return Node(self.name, text, pos, new_pos - 1, children)
+        return Node(self.name, text, pos, new_pos - 1, tuple(children...))
     end
     return EmptyNode()
 end

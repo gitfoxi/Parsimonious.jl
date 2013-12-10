@@ -1,9 +1,9 @@
 
 module test_expressions
 
-# reload("Nodes.jl")
-# reload("Expressions.jl")
-# reload("Grammars.jl")
+reload("Nodes.jl")
+reload("Expressions.jl")
+reload("Grammars.jl")
 
 using Base.Test
 using Nodes
@@ -100,19 +100,19 @@ n = Node("greeting", "hello", 1, 5)
 # TODO: Inconsistent ways of passing 'name' to Sequence and Literal constructors. Make them all like Sequence
 s = Sequence(Literal("heigh", name="greeting1"), Literal("ho", name="greeting2"), name="dwarf")
 text = "heighho"
-@test isequal(match(s, text), Node("dwarf", text, 1, 7, [Node("greeting1", text, 1, 5), Node("greeting2", text, 6, 7)]))
+@test isequal(match(s, text), Node("dwarf", text, 1, 7, (Node("greeting1", text, 1, 5), Node("greeting2", text, 6, 7))))
 #
 # test_one_of
 #        """``OneOf`` should return its own node, wrapping the child that succeeds."""
 o = OneOf(Literal("a", name="lit"), name="one_of")
 text = "aa"
-@test isequal(match(o, text), Node("one_of", text, 1, 1, [Node("lit", text, 1, 1)]))
+@test isequal(match(o, text), Node("one_of", text, 1, 1, (Node("lit", text, 1, 1),)))
 #
 # test_optional
 #        """``Optional`` should return its own node wrapping the succeeded child."""
 expr = Optional(Literal("a", name="lit"), name="opt")
 text = "a"
-@test isequal(match(expr, text), Node("opt", text, 1, 1, [Node("lit", text, 1, 1)]))
+@test isequal(match(expr, text), Node("opt", text, 1, 1, (Node("lit", text, 1, 1),)))
 #
 #        # Test failure of the Literal inside the Optional; the
 #        # LengthTests.test_optional is ambiguous for that.
@@ -150,7 +150,7 @@ isequal(match(expr, text), Node("one", text, 1, 1, (Node("lit", text, 1, 1),)))
 #        """
 expr = OneOrMore(Literal("a", name="lit"), name="more")
 text = "aa"
-isequal(parse(expr, text), Node("more", text, 1, 2, [Node("lit", text, 1, 1), Node("lit", text, 2, 2)]))
+isequal(parse(expr, text), Node("more", text, 1, 2, (Node("lit", text, 1, 1), Node("lit", text, 2, 2),)))
 #
 #
 #class ErrorReportingTests(TestCase):
@@ -354,19 +354,19 @@ end
 @test parse(Regex("fo.*", options="", name="myregex"), "fooooo", 1) == Node("myregex", "fooooo", 1, 6)  #, match=match(r"fo.*", "fooooo"))
 @test_throws parse(Regex("fo.*", options="", name="myregex"), "FOOOOO", 1)
 @test parse(Regex("fo.*", options="i", name="myregex"), "FOOOOO", 1) == Node("myregex", "FOOOOO", 1, 6)  #, match=match(r"fo.*"i, "FOOOOO"))
-@test parse(Sequence("seq", l, l), "foofoo", 1) == Node("seq", "foofoo", 1, 6, [Node("foo", "foofoo", 1, 3), Node("foo", "foofoo", 4, 6), ])
-@test parse(OneOf(Literal("foo"), Literal("bar")), "bar", 1) == Node("", "bar", 1, 3, [Node("", "bar", 1, 3)])
-@test parse(Sequence(Lookahead(Literal("fo")), Literal("foo")), "foo") == Node("", "foo", 1, 3, [Node("", "foo", 1, 0), Node("", "foo", 1, 3)])
-@test parse(Sequence(Not(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, [Node("", "foo", 1, 0) Node("", "foo", 1, 3)])
-@test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, [Node("", "foo", 1, 0), Node("", "foo", 1, 3)])
-@test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "barfoo") == Node("", "barfoo", 1, 6, [Node("", "barfoo", 1, 3, [Node("", "barfoo", 1, 3)]), Node("", "barfoo", 4, 6)])
+@test parse(Sequence("seq", l, l), "foofoo", 1) == Node("seq", "foofoo", 1, 6, (Node("foo", "foofoo", 1, 3), Node("foo", "foofoo", 4, 6)))
+@test parse(OneOf(Literal("foo"), Literal("bar")), "bar", 1) == Node("", "bar", 1, 3, (Node("", "bar", 1, 3),))
+@test parse(Sequence(Lookahead(Literal("fo")), Literal("foo")), "foo") == Node("", "foo", 1, 3, (Node("", "foo", 1, 0), Node("", "foo", 1, 3)))
+@test parse(Sequence(Not(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, (Node("", "foo", 1, 0), Node("", "foo", 1, 3)))
+@test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, (Node("", "foo", 1, 0), Node("", "foo", 1, 3)))
+@test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "barfoo") == Node("", "barfoo", 1, 6, (Node("", "barfoo", 1, 3, (Node("", "barfoo", 1, 3),)), Node("", "barfoo", 4, 6)))
 @show parse(ZeroOrMore(Literal("bar")), "")
 @test parse(ZeroOrMore(Literal("bar")), "") == Node("", "", 1, 0) # Again, not sure if it should have children
-@test parse(ZeroOrMore(Literal("bar")), "bar") == Node("", "bar", 1, 3, [Node("", "bar", 1, 3)])
-@test parse(ZeroOrMore(Literal("bar")), "barbar") == Node("", "barbar", 1, 6, [Node("", "barbar", 1, 3), Node("", "barbar", 4, 6)])
+@test parse(ZeroOrMore(Literal("bar")), "bar") == Node("", "bar", 1, 3, (Node("", "bar", 1, 3),))
+@test parse(ZeroOrMore(Literal("bar")), "barbar") == Node("", "barbar", 1, 6, (Node("", "barbar", 1, 3), Node("", "barbar", 4, 6)))
 @test_throws parse(OneOrMore(Literal("bar")), "")
-@test parse(OneOrMore(Literal("bar")), "barbar") == Node("", "barbar", 1, 6, [Node("", "barbar", 1, 3), Node("", "barbar", 4, 6)])
-@test parse(OneOrMore(Literal("bar")), "bar") == Node("", "bar", 1, 3, [Node("", "bar", 1, 3)])
+@test parse(OneOrMore(Literal("bar")), "barbar") == Node("", "barbar", 1, 6, (Node("", "barbar", 1, 3), Node("", "barbar", 4, 6)))
+@test parse(OneOrMore(Literal("bar")), "bar") == Node("", "bar", 1, 3, (Node("", "bar", 1, 3),))
 @test_throws parse(OneOrMore(Literal("bar")), "bas")
 te = TestExpression("tst")
 @test Sequence("", te, te) == Sequence(te, te, name="") == Sequence(te, te)

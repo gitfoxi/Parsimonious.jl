@@ -278,6 +278,6 @@ _end(m::OneOrMoreMatch) = m._end
 _end(m::ZeroLengthMatch) = m.pos - 1
 _end(n::MatchNode) = _end(n.match)
 Node(T::String, ::String, start::Int, _end::Int, children::Tuple) = Node(T, start, _end, children)
-Node(T::String, ::String, start::Int, _end::Int, children::Array) = Node(T, start, _end, tuple(children...))
+# Node(T::String, ::String, start::Int, _end::Int, children::Array) = Node(T, start, _end, tuple(children...))
 Node(T::String, ::String, start::Int, _end::Int) = Node(T, start, _end)
 end

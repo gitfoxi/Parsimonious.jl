@@ -18,21 +18,21 @@ using Util
 # test_quantifier(self):
 text = "*"
 @show parse(rule_grammar.exprs["quantifier"], text)
-@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, [Node("", text, 1, 1), Node("_", text, 2, 1)])
+@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, (Node("", text, 1, 1), Node("_", text, 2, 1)))
 
 # TODO: Whether nodeA == nodeB regardless of "match" to make tests less verbose
 # After all, if they match the same text what's the difference?
 text = "?"
-@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, [Node("", text, 1, 1), Node("_", text, 2, 1)])
+@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, (Node("", text, 1, 1), Node("_", text, 2, 1)))
 
 text = "+"
-@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, [Node("", text, 1, 1), Node("_", text, 2, 1)])
+@test parse(rule_grammar.exprs["quantifier"], text) == Node("quantifier", text, 1, 1, (Node("", text, 1, 1), Node("_", text, 2, 1)))
 
 eq_(a::AnyNode, b::AnyNode) = a == b
 
 # test spaceless_literal(self):
 text = dq"anything but quotes#$*&^"
-@test eq_(parse(rule_grammar.exprs["spaceless_literal"], text) , Node("spaceless_literal", text, 1, length(text), [Node("", text, 1, length(text))]))
+@test eq_(parse(rule_grammar.exprs["spaceless_literal"], text) , Node("spaceless_literal", text, 1, length(text), (Node("", text, 1, length(text)),)))
 
 # TODO: benchmark visitors with array, tuple and vararg paramters
 # TODO: generic visit throw error when called for a node for which visit(::MyVisitor, ::Node{:mynode}) exists
@@ -48,18 +48,18 @@ text = unescape_string(s""" "\\"" """)
 @show length(unescape_string(text))
 println(text)
 println(unescape_string(text))
-@test eq_(parse(rule_grammar.exprs["spaceless_literal"], text), Node("spaceless_literal", text, 1, 4, [ Node("", text, 1, 4)]))
+@test eq_(parse(rule_grammar.exprs["spaceless_literal"], text), Node("spaceless_literal", text, 1, 4, ( Node("", text, 1, 4),)))
 
 # test regex(self):
 text = p"""~"[a-zA-Z_][a-zA-Z_0-9]*"LI"""
 
 @test eq_(parse(rule_grammar.exprs["regex"], text),
-    Node("regex", text, 1, length(text), [
+    Node("regex", text, 1, length(text), (
          Node("", text, 1, 1),
-         Node("spaceless_literal", text, 2, 25, [
-             Node("", text, 2, 25)]),
+         Node("spaceless_literal", text, 2, 25, (
+             Node("", text, 2, 25),)),
          Node("", text, 26, 27),
-         Node("_", text, 28, 27)]))
+         Node("_", text, 28, 27),)))
 
 ok_(n::MatchNode) = true
 
@@ -164,7 +164,7 @@ howdy = "howdy"
 
 # It should turn into a Node from the Optional and another from the
 # Literal within.
-@test eq_(parse(default_rule, howdy), Node("boy", howdy, 1, 5, [Node("", howdy, 1, 5)]))
+@test eq_(parse(default_rule, howdy), Node("boy", howdy, 1, 5, (Node("", howdy, 1, 5),)))
 
 """
 class GrammarTests(TestCase):
@@ -182,7 +182,7 @@ That the correct ``Expression`` tree is built is already tested in
 
 greeting_grammar = Grammar(s"""greeting = "hi" / "howdy" """)
 tree = parse(greeting_grammar, "hi")
-@test eq_(tree, Node("greeting", "hi", 1, 2, [Node("", "hi", 1, 2)]))
+@test eq_(tree, Node("greeting", "hi", 1, 2, (Node("", "hi", 1, 2),)))
 
 # test unicode(self):
 # Assert that a ``Grammar`` can convert into a string-formatted series of rules.
@@ -216,10 +216,10 @@ grammar = Grammar("""
                   bold_close = "))"
                   """)
 s = " ((boo))yah"
-@test eq_(match(grammar, s, 2), Node("bold_text", s, 2, 8, [
+@test eq_(match(grammar, s, 2), Node("bold_text", s, 2, 8, (
                                  Node("bold_open", s, 2, 3),
                                  Node("text", s, 4, 6),
-                                 Node("bold_close", s, 7, 8)]))
+                                 Node("bold_close", s, 7, 8))))
 
 # test bad_grammar(self):
 # Constructing a Grammar with bad rules should raise ParseError.
@@ -273,9 +273,9 @@ grammar = Grammar(s"""starts_with_a = &"a" ~"[a-z]+" """)
 @assert_raises ParseError parse(grammar, "burp")
 
 s = "arp"
-@test eq_(parse(grammar, "arp"), Node("starts_with_a", s, 1, 3, [
+@test eq_(parse(grammar, "arp"), Node("starts_with_a", s, 1, 3, (
                               Node("", s, 1, 0),
-                              Node("", s, 1, 3)]))
+                              Node("", s, 1, 3))))
 
 # test parens(self):
 grammar = Grammar("""sequence = "chitty" (" " "bang")+""")
@@ -288,9 +288,9 @@ grammar = Grammar(s"""starts_with_a = &"a" ~"[a-z]+" """)
 @assert_raises ParseError parse(grammar, "burp")
 
 s = "arp"
-eq_(parse(grammar, "arp"), Node("starts_with_a", s, 1, 3, [
+eq_(parse(grammar, "arp"), Node("starts_with_a", s, 1, 3, (
                               Node("", s, 1, 0),
-                              Node("", s, 1, 3)]))
+                              Node("", s, 1, 3))))
 
 # test parens(self):
 grammar = Grammar("""sequence = "chitty" (" " "bang")+""")
