@@ -33,9 +33,9 @@ macro timeit(run, setup, n)
         [f(i) for i in 1:100] # compile
         # benchmark(f, string($(run)), 500000)["AverageWall"][1]
         # n = 500000
-        td = Array(Uint64, n)
+        td = Array(Uint64, $n)
         q = 0.
-        for (i, x) in zip(1:n, rand(Uint64, n))
+        for (i, x) in zip(1:$n, rand(Uint64, $n))
             t_start = time_ns()
             q += f(x)
             t_end = time_ns()
