@@ -107,6 +107,9 @@ end
 type Literal <: Expression
     literal::String
     name::String
+    length::Int
+
+    Literal(literal, name) = new(literal, name, length(literal))
 end
 
 # TODO: get rid of all keyword default constructors because slow
@@ -115,7 +118,7 @@ Literal(literal::String; name::String="") = Literal(literal, name)
 
 function _uncached_match(literal::Literal, text::String, pos::Int, cache::Dict, err::ParseError)
     if beginswith(text[pos:], literal.literal)
-        return Node(literal.name, text, pos, pos - 1 + length(literal.literal))
+        return Node(literal.name, text, pos, pos - 1 + literal.length)
     end
     EmptyNode()  # "Empty" node == no match
 end
