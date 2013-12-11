@@ -154,7 +154,7 @@ Regex(pattern::String; name="", options="") = Regex(pattern, name, options)
 
 function _uncached_match(regex::Regex, text::String, pos::Int, cache::Dict, err::ParseError)
     m = match(regex.re, text[pos:])
-    if isa(m, Nothing)
+    if m == nothing
         return EmptyNode()
     end
     Node(regex.name, text, pos, pos - 1 + length(m.match)) # no longer special , m)
