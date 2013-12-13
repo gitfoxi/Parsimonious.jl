@@ -10,19 +10,95 @@ using Base.Test
 
 # TODO: Implement convergence in Benchmark necessetating some LiveStates functionality too.
 
-percentdiff(a, b) = 100 * (a-b)/a
+macro calltimes(ex, times)
+    quote
+        for i in 1:$times
+            $ex
+        end
+    end
+end
 
-# def test_lists_vs_dicts():
-"""See what's faster at int key lookup: dicts or lists."""
-list_time = @timeit :(x -> l[1 + x % 9000]) :(l = linspace(1,10000, 10001)) 99999
-dict_time = @timeit :(x -> d[1 + int(x % 9000)]) :(d = {x => 1. + x for x in 1:10000}) 99999
+function setup_lookup(n, m)
+    dict = Dict{(Int, Int), Float64}()
+    for i in 1:n
+        for j in 1:m
+            dict[(i, j)] = 0.0
+        end
+    end
+    return dict
+end
 
-@show list_time, dict_time
-@test list_time < dict_time
+function do_baseline(n::Int, m::Int)
+    for i in 1:n
+        for j in 1:m
+        end
+    end
+end
 
-# Arrays are faster than dictionaries, duh.
-# But surprisingly not by much
-# (list_time,dict_time) => (487.932448,772.362224)
+function bench_lookup(n::Int, m::Int, dict)
+    for i in 1:n
+        for j in 1:m
+            dict[(i, j)]
+        end
+    end
+end
 
+function setup_lookup(n)
+    dict = Dict{Int, Float64}()
+    for i in 1:n
+        dict[i] = 0.0
+    end
+    return dict
+end
+
+function do_baseline(n::Int)
+    for i in 1:n
+    end
+end
+
+function bench_lookup(n::Int, dict)
+    for i in 1:n
+        dict[i]
+    end
+end
+
+
+dict = setup_lookup(40000)
+baseline = mean([(@elapsed (@calltimes do_baseline(40000) 3)) for i in 1:5]) / 3.
+time_lookup = mean([(@elapsed (@calltimes bench_lookup(40000, dict) 3)) for i in 1:5]) / 3.
+
+@printf "Julia int-key lookup: %.2f milliseconds\n" (time_lookup - baseline) * 1000.
+
+dict = setup_lookup(200, 200)
+baseline = mean([(@elapsed (@calltimes do_baseline(200, 200) 3)) for i in 1:5]) / 3.
+time_lookup = mean([(@elapsed (@calltimes bench_lookup(200, 200, dict) 3)) for i in 1:5]) / 3.
+
+@printf "Julia tuple-key lookup: %.2f milliseconds\n" (time_lookup - baseline) * 1000.
+
+tcount = 0
+type Trex
+    depth::Int
+    child
+
+    function Trex(depth)
+        global tcount
+        tcount += 1
+
+        if(depth > 0)
+            new(depth, (Trex(depth - 1), Trex(depth - 1)))
+        else
+            new(depth, nothing)
+        end
+    end
+end
+
+function reset_tcount()
+    global tcount
+    tcount = 0
+end
+reset_tcount()
+
+@time Trex(10)
+@show tcount
 
 end

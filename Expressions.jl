@@ -52,7 +52,7 @@ end
 
 function match(expr::Expression, text::String, pos::Int=1)
     err::ParseError = ParseError(text, expr, pos)
-    node = _match(expr, text, pos, Dict{(Int, Int), AnyNode}(), err)
+    node = _match(expr, text, pos, Dict(), err)
     if isempty(node)
         throw(err)
     end
@@ -69,11 +69,23 @@ function hasfield(t, field)
 end
 
 function _match(expr::Expression, text::String, pos::Int, cache::Dict, err::ParseError)
-    expr_id::Int = object_id(expr)
-    key::(Int, Int) = (expr_id, pos)
+    # This is interesting. Tuple keys are slow so
+    #   key = (object_id(expr), pos)
+    # results in a much slower program
+    # This key, however, is subject to collision, however unlikely so is a bug in the now much-faster program
+    # When tuple keys are fixed, go back to the proper key.
+    key = hash(object_id(expr) * pos)
+    local node
     if !haskey(cache, key)
         # TODO: hottest of all hot spots here
+        #@show expr.name, typeof(expr), pos
+        #println(text[pos:min(pos + 20, end)])
         node = cache[key] = _uncached_match(expr, text, pos, cache, err)
+
+        #@show node
+        #if isa(node, MatchNode)
+        #    @show nodetext(node, text)
+        #end
         # For fun, to see memory savings replace above line with:
         # node = _uncached_match(expr, text, pos, cache, err)
         # Surprisingly, memory usage went up to 183M without the cache from 139M with.
@@ -222,13 +234,19 @@ end
 function _uncached_match(sequence::Sequence, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
     length_of_sequence = 0
-    children = MatchNode[]
+    first = true
+    local children
     for m in sequence.members
         node = _match(m, text, new_pos, cache, err)
         if isempty(node)
             return node
         end
-        push!(children, node)
+        if first
+            children = MatchNode[node]
+            first = false
+        else
+            push!(children, node)
+        end
         new_pos += textlength(node)
         length_of_sequence += textlength(node)
     end
@@ -343,14 +361,20 @@ ZeroOrMore(members::Expression...; name::String="") = ZeroOrMore(name, members..
 
 function _uncached_match(self::ZeroOrMore, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
-    children = MatchNode[]
+    first = true
+    local children
     while true
         node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node) || textlength(node) == 0
-            length(children) == 0 && return Node(self.name, text, pos, new_pos - 1)
+            first && return Node(self.name, text, pos, new_pos - 1)
             return Node(self.name, text, pos, new_pos - 1, tuple(children...))
         end
-        push!(children, node)
+        if first
+            children = MatchNode[node]
+            first = false
+        else
+            push!(children, node)
+        end
         new_pos += textlength(node)
     end
     return EmptyNode()
@@ -374,20 +398,26 @@ OneOrMore(members::Expression...; _min::Int=1, name::String="") = OneOrMore(name
 
 function _uncached_match(self::OneOrMore, text::String, pos::Int, cache::Dict, err::ParseError)
     new_pos = pos
-    children = MatchNode[]
+    first = true
+    local children
     while true
         node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node)
             break
         end
-        push!(children, node)
+        if first
+            children = MatchNode[node]
+            first = false
+        else
+            push!(children, node)
+        end
         len = textlength(node)
         if len == 0
             break
         end
         new_pos += len
     end
-    if length(children) >= self._min
+    if !first && length(children) >= self._min
         return Node(self.name, text, pos, new_pos - 1, tuple(children...))
     end
     return EmptyNode()

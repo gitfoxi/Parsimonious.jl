@@ -52,7 +52,6 @@ father = """{
         }
       ]
     }"""
-# TODO: slicker syntax:  more_fathers = join([father] * 60, ",")
 
 more_fathers = join(repeat([father], inner=[60]), ",")
 
@@ -102,17 +101,20 @@ parse(grammar.exprs["string"], (s""" "hello" """))
 NUMBER = 1
 REPEAT = 5
 
+@show length(father)
+@show length(json)
+
 parse(grammar, father)
 parse(grammar, json)
 for i in 1:10
     # Disabling garbage collection during parse gets more consistent results and
     # gets the time down below 200ms. I think this is what's going on in the
     # Python benchmark as well so that accounts for some of the difference.
-#    gc_disable()
+    gc_disable()
     # @timed -> (return vale, time in seconds, memory in bytes)
     @time parse(grammar, json)
-#    gc_enable()
-#    gc()
+    gc_enable()
+    gc()
 end
 # @timeit :(parse(grammar, json)) :() 1000
 
