@@ -141,6 +141,21 @@ function _as_rhs(literal::Literal)
     "\"" * literal.literal * "\""
 end
 
+# Stefan won't accept my anchor-regex patch. Fine
+function MyBaseRegex(pattern::String, flags::String)
+    options = Base.DEFAULT_OPTS
+    PCRE = Base.PCRE
+    for f in flags
+        options |= f=='i' ? PCRE.CASELESS  :
+                   f=='m' ? PCRE.MULTILINE :
+                   f=='s' ? PCRE.DOTALL    :
+                   f=='x' ? PCRE.EXTENDED  :
+                   f=='a' ? PCRE.ANCHORED  :
+                   error("unknown regex flag: $f")
+    end
+    Base.Regex(pattern, options)
+end
+
 type Regex <: Expression
     name::String
     re::Base.Regex
@@ -148,13 +163,11 @@ type Regex <: Expression
     original_re
 
     function Regex(pattern, name="", options="")
-        if !in('a', options)
-            options = options * "a"
-        end
         original_re = pattern
+        options *= "a"
         @assert(length(pattern) > 0)
 
-        new(name, Base.Regex(pattern, options), options, original_re)
+        new(name, MyBaseRegex(pattern, options), options, original_re)
     end
 end
 
