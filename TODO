@@ -1,3 +1,5 @@
+Reorganize Node around the SubString() concept.
+
 Cache works the same as LPEG?
 
 Really untangle the escaping issue so you can give good instructions on how to
@@ -14,11 +16,11 @@ Finish tuple conversion of Node and calls from Expression
 
 LPEG-like declaritive interface
 
-Benchmark against: Parsley, LPEG, PEG.js
+Benchmark against: Parsley, LPEG, PEG.js, peg
 
 Clean style like `base/pkg`
 
-Fixed-length, range-length match
+Fixed-length, range-length match {4}; {4,10} -- but `peg` lives without this. Only has `*` and `+`.
 
 Streaming
 
@@ -81,7 +83,7 @@ Arbitrary quotes like Perl
 
 Tail-call optimization.
 
-String slicing.
+String slicing -- It's called SubString() but I think that's what s[:] should do.
 
 Tighter allocations for small objects.
 

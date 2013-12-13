@@ -56,7 +56,6 @@ father = """{
 more_fathers = join(repeat([father], inner=[60]), ",")
 
 json = """{"fathers" : [""" * more_fathers * "]}"
-println(json[1:100])
 
 notjsonspec = """
     value = space (string / number / object / array / true_false_null)
@@ -85,7 +84,7 @@ notjsonspec = """
     """
 
 # notjsonspec = unescape_string(notjsonspec)
-println(notjsonspec)
+println("SPEC:\n", notjsonspec)
 grammar = Grammar(notjsonspec)
 
 # This is what it takes to debug stupid quoting issues
@@ -101,21 +100,22 @@ parse(grammar.exprs["string"], (s""" "hello" """))
 NUMBER = 1
 REPEAT = 5
 
-@show length(father)
-@show length(json)
-
 parse(grammar, father)
 parse(grammar, json)
-for i in 1:10
-    # Disabling garbage collection during parse gets more consistent results and
-    # gets the time down below 200ms. I think this is what's going on in the
-    # Python benchmark as well so that accounts for some of the difference.
-    gc_disable()
-    # @timed -> (return vale, time in seconds, memory in bytes)
-    @time parse(grammar, json)
-    gc_enable()
-    gc()
-end
+
+# Disabling garbage collection during parse gets more consistent results.
+# The mean time doesn't seem to change much and is sometimes faster with gc
+# enabled somehow.
+
+# gc_disable()
+# @timed -> (return vale, time in seconds, memory in bytes)
+min_time = minimum([@elapsed parse(grammar, json) for i in 1:5])
+# gc_enable()
+# gc()
+@time parse(grammar, json)
+
+@printf "Min time to parse %.1f KB is %.0f ms which is %.0f KB/s\n" length(json) min_time*1e3 (length(json)/min_time/1024.)
+
 # @timeit :(parse(grammar, json)) :() 1000
 
 end

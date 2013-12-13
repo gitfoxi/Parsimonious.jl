@@ -24,7 +24,7 @@ type IncompleteParseError <: ParseException
 end
 
 function showerror(io::IO, e::ParseError)
-    print_escaped(io, "Rule '$(e.expr.name)' didn't match at '$(e.text[e.pos:min(end,e.pos+20)])' (line $(line(e)), column $(column(e))).", "")
+    print_escaped(io, "Rule '$(e.expr.name)' didn't match at '$(e.text[e.pos:minimum(end,e.pos+20)])' (line $(line(e)), column $(column(e))).", "")
 end
 
 function unicode(e::ParseException)
@@ -35,7 +35,7 @@ function unicode(e::ParseException)
 end
 
 function showerror(io::IO, e::IncompleteParseError)
-    print_escaped(io, "Rule '$(e.expr.name)' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '$(e.text[e.pos+1:min(end,e.pos + 20)])' (line $(line(e)), column $(column(e))).", "")
+    print_escaped(io, "Rule '$(e.expr.name)' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '$(e.text[e.pos+1:minimum(end,e.pos + 20)])' (line $(line(e)), column $(column(e))).", "")
 end
 
 line(e::ParseException) = 1 + count(e.text[1:e.pos-1]) do c c == '\n' end
@@ -131,8 +131,7 @@ end
 Literal(literal::String; name::String="") = Literal(literal, name)
 
 function _uncached_match(literal::Literal, text::String, pos::Int, cache::Dict, err::ParseError)
-    # TODO: don't slice the string at all but make a beginswith that takes an idx
-    if beginswith(text[pos:min(pos+literal.length-1,end)], literal.literal)
+    if beginswith(SubString(text, pos, length(text)), literal.literal)
         return Node(literal.name, text, pos, pos - 1 + literal.length)
     end
     EmptyNode()  # "Empty" node == no match
