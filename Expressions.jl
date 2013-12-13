@@ -52,7 +52,9 @@ end
 
 function match(expr::Expression, text::String, pos::Int=1)
     err::ParseError = ParseError(text, expr, pos)
-    node = _match(expr, text, pos, Dict(), err)
+    cache = Dict{Uint, AnyNode}()
+    sizehint(cache, 10*length(text))
+    node = _match(expr, text, pos, cache, err)
     if isempty(node)
         throw(err)
     end
@@ -74,7 +76,7 @@ function _match(expr::Expression, text::String, pos::Int, cache::Dict, err::Pars
     # results in a much slower program
     # This key, however, is subject to collision, however unlikely so is a bug in the now much-faster program
     # When tuple keys are fixed, go back to the proper key.
-    key = hash(object_id(expr) * pos)
+    key::Uint = (uint(object_id(expr) << 30) | pos)
     local node
     if !haskey(cache, key)
         # TODO: hottest of all hot spots here
@@ -146,12 +148,11 @@ type Regex <: Expression
     original_re
 
     function Regex(pattern, name="", options="")
+        if !in('a', options)
+            options = options * "a"
+        end
         original_re = pattern
         @assert(length(pattern) > 0)
-        # Hat '^' enforces match from beginning of pattern
-        if pattern[1] != '^'
-            pattern = "^" * pattern
-        end
 
         new(name, Base.Regex(pattern, options), options, original_re)
     end
@@ -165,7 +166,8 @@ Regex(pattern::String; name="", options="") = Regex(pattern, name, options)
 # How does the macro do it? I don't know. Thanks `regex.jl`
 
 function _uncached_match(regex::Regex, text::String, pos::Int, cache::Dict, err::ParseError)
-    m = match(regex.re, text[pos:])
+# TODO: want but can't because bug
+    m = Base.match(regex.re, text, pos)
     if m == nothing
         return EmptyNode()
     end

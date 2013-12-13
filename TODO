@@ -84,3 +84,5 @@ Tail-call optimization.
 String slicing.
 
 Tighter allocations for small objects.
+
+regex match like python where it must match the beginning of a string.
