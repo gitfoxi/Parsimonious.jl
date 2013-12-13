@@ -131,7 +131,8 @@ end
 Literal(literal::String; name::String="") = Literal(literal, name)
 
 function _uncached_match(literal::Literal, text::String, pos::Int, cache::Dict, err::ParseError)
-    if beginswith(text[pos:], literal.literal)
+    # TODO: don't slice the string at all but make a beginswith that takes an idx
+    if beginswith(text[pos:min(pos+literal.length-1,end)], literal.literal)
         return Node(literal.name, text, pos, pos - 1 + literal.length)
     end
     EmptyNode()  # "Empty" node == no match
