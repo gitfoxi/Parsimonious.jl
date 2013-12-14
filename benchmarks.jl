@@ -32,30 +32,34 @@ parsers. It's just meant to compare across versions of Parsimonious.
 
 """
 
-father = """{
-    "id" : 1,
-    "married" : true,
-    "name" : "Larry Lopez",
-    "sons" : null,
-    "daughters" : [
-      {
-        "age" : 26,
-        "name" : "Sandra"
-        },
-      {
-        "age" : 25,
-        "name" : "Margaret"
-        },
-      {
-        "age" : 6,
-        "name" : "Mary"
+father = 
+"""{
+        "id" : 1,
+        "married" : true,
+        "name" : "Larry Lopez",
+        "sons" : null,
+        "daughters" : [
+          {
+            "age" : 26,
+            "name" : "Sandra"
+            },
+          {
+            "age" : 25,
+            "name" : "Margaret"
+            },
+          {
+            "age" : 6,
+            "name" : "Mary"
+            }
+          ]
         }
-      ]
-    }"""
-
+"""
 more_fathers = join(repeat([father], inner=[60]), ",")
 
 json = """{"fathers" : [""" * more_fathers * "]}"
+# w = open("jljson.json", "w")
+# print(w, json)
+# close(w)
 
 notjsonspec = """
     value = space (string / number / object / array / true_false_null)
@@ -114,7 +118,7 @@ min_time = minimum([@elapsed parse(grammar, json) for i in 1:5])
 # gc()
 @time parse(grammar, json)
 
-@printf "Min time to parse %.1f KB is %.0f ms which is %.0f KB/s\n" length(json) min_time*1e3 (length(json)/min_time/1024.)
+@printf "Min time to parse %.1f KB is %.0f ms which is %.0f KB/s\n" length(json)/1024. min_time*1e3 (length(json)/min_time/1024.)
 
 # @timeit :(parse(grammar, json)) :() 1000
 
