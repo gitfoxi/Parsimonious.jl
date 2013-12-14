@@ -37,6 +37,7 @@ and memeory allocation.
 Make a simplified model of recursive matching to quickly implement in several
 languages.
 
+travis-ci
 
 Benchmark
 ---------

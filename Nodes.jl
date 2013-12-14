@@ -249,7 +249,13 @@ function visit(v::NodeVisitor, fulltext::String, node::MatchNode)
     visited_children = visit_on_the_way_down(v, fulltext, node)
     try
         # TODO: Move this whole thing to tuples -- but not now
-        return visit(v, fulltext, node, visited_children)  # ...
+        @show v
+        @show name(node)
+        @show visited_children
+        @which visit(v, fulltext, node, visited_children)
+        returns = visit(v, fulltext, node, visited_children)
+        @show returns
+        return returns
     catch e
         if isa(e, VisitationError)
             rethrow(e)

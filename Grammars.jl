@@ -6,7 +6,7 @@ using Nodes
 using Expressions
 import Nodes.visit # for overloading NodeVisitor
 
-export Grammar, lookup, rule_grammar, parse, unicode, match
+export Grammar, lookup, rule_grammar, parse, unicode, match,  @grammar_mstr
 
 # You have to import everything you want to overload and export
 import Expressions: parse, unicode, match
@@ -347,5 +347,7 @@ function unicode(g::Grammar)
     end
     join([sexprs], "\n")
 end
+
+macro grammar_mstr(s) Grammar(rule_grammar, s) end
 
 end # module
