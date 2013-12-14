@@ -88,3 +88,14 @@ String slicing -- It's called SubString() but I think that's what s[:] should do
 Tighter allocations for small objects.
 
 regex match like python where it must match the beginning of a string.
+
+
+Quoting Issues
+--------------
+
+# This is what it takes to debug stupid quoting issues
+parse(grammar.exprs["chars"], """hello""")
+parse(grammar.exprs["number"], """12""")
+parse(grammar.exprs["dq"], "\"")
+parse(grammar.exprs["string"], (s""" "hello" """))
+
