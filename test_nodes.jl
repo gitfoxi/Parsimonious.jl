@@ -18,25 +18,25 @@ type HtmlFormatter <: NodeVisitor end
 #     def visit_bold_open(self, node, visited_children):
 #         return '<b>'
 
-visit(::HtmlFormatter, ::String, ::ChildlessNode{:bold_open}) = "<b>"
+visit(::HtmlFormatter, ::LeafNode{:bold_open}) = "<b>"
 
 #     def visit_bold_close(self, node, visited_children):
 #         return '</b>'
 #
 
-visit(::HtmlFormatter, ::String, ::ChildlessNode{:bold_close}) = "</b>"
+visit(::HtmlFormatter, ::LeafNode{:bold_close}) = "</b>"
 
 #     def visit_text(self, node, visited_children):
 #         """Return the text verbatim."""
 #         return node.text
 
-visit(::HtmlFormatter, f::String, node::ChildlessNode{:text}) = nodetext(node, f)
+visit(::HtmlFormatter, node::LeafNode{:text}) = nodetext(node)
 
 #
 #     def visit_bold_text(self, node, visited_children):
 #         return ''.join(visited_children)
 
-visit(::HtmlFormatter, ::String, ::ParentNode{:bold_text}, visited_children) = join(visited_children, "")
+visit(::HtmlFormatter, ::ParentNode{:bold_text}, visited_children) = join(visited_children, "")
 
 type ExplosiveFormatter <: NodeVisitor end
 
@@ -49,7 +49,7 @@ type ExplosiveFormatter <: NodeVisitor end
 #         raise ValueError
 
 # BoundsError is supposed to get wrapped with VisitationError
-visit(::ExplosiveFormatter, ::String, ::ChildlessNode{:boom}) = throw(BoundsError)
+visit(::ExplosiveFormatter, ::LeafNode{:boom}) = throw(BoundsError)
 
 #
 #
@@ -81,7 +81,7 @@ tree = Node("bold_text", text, 1, 9,
             (Node("bold_open", text, 1, 2),
               Node("text", text, 3, 7),
               Node("bold_close", text, 8, 9)))
-result = visit(HtmlFormatter(), text, tree)
+result = visit(HtmlFormatter(), tree)
 @test result == "<b>o hai</b>"
 
 
@@ -109,10 +109,12 @@ end
 # def test_str():
 
 txt = "o hai"
-n = Node("text", 1, 5)
 # stringexample = "<Node called 'text' matching 'o hai'>\n"
-stringexample = "1 ChildlessNode{:text}                                                  'o hai'\n"
-@test string(NodeText(n, txt)) == stringexample
+stringexample = "1 LeafNode{:text}                                                       'o hai'\n"
+n = Node("text", txt, 1, 5)
+@show stringexample
+@show string(n)
+@test string(n) == stringexample
 
 
 #
@@ -157,7 +159,7 @@ nct = Node("myexpr", copytext, 5, 8)
 @test length(n) == 0
 
 @test isa(n, AnyNode)
-@test nodetext(n, mytext) == " is "
+@test nodetext(n) == " is "
 
 # n == nct even though text is a copy, it is an exact copy
 @test !is(mytext, copytext)
@@ -196,7 +198,7 @@ n2 = Node("myexpr", mytext, 5, 8, (n3, n3, n3, n3))
 
 type SomeVisitor <: NodeVisitor end
 @test_throws visit(SomeVisitor(), n2)
-@test lift_child(SomeVisitor(), "foobar", n2, ["foo"]) == "foo"
+@test lift_child(SomeVisitor(), n2, ["foo"]) == "foo"
 
 # keyword syntax
 # many tests because I thought for a long time this can't work
@@ -221,11 +223,10 @@ type SomeVisitor <: NodeVisitor end
 @test textlength(Node("foo","foo", 1,3)) == 3
 
 txt = "asdf;lkj"
-n1 = Node("string", 1, 8)
-n2 = Node("string", 1, 8, (Node("alpha", 1, 4), Node("sym", 5, 5), Node("not", 6,5), Node("alpha",6, 8)))
+n1 = Node("string", txt, 1, 8)
+n2 = Node("string", txt, 1, 8, (Node("alpha", txt, 1, 4), Node("sym", txt, 5, 5), Node("not", txt, 6, 5), Node("alpha", txt, 6, 8)))
 for n in (n1, n2)
-    nt = NodeText(n, txt)
-    print(nt)
+    print(n)
 end
 
 ####################### TEST
@@ -233,43 +234,59 @@ end
 ####################### TEST
 
 ########### TEST
-@test nodetext(n2, txt) == "asdf;lkj"
+@test nodetext(n2) == "asdf;lkj"
 ########### TEST
 
 ########### TEST
 @test isempty(n2) == false
 @test isempty(EmptyNode()) == true
 @test isempty(nothing) == true
-@test isempty(Node("asdf", 1, 0)) == false
+@test isempty(Node("asdf", "asdf", 1, 0)) == false
 ########### TEST
 
 
 ########### TEST
 @test n2 == n2
-@test Node("asdf", 1, 2) == Node("asdf", 1, 2)
-@test Node("asdf", 1, 3) != Node("asdf", 1, 2)
-@test Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2)
-@test Node("asdf", 1, 2, (Node("bsdf", 1, 1),)) != Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
-@test Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) == Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) 
-@test Node("asdf", 1, 2, (Node("bsdf", 1, 2),)) != EmptyNode()
+@test Node("asdf", "texty", 1, 2) == Node("asdf", "texty", 1, 2)
+@test Node("asdf", "texty", 1, 3) != Node("asdf", "texty", 1, 2)
+@test Node("asdf", "texty", 1, 2, (Node("bsdf", "texty", 1, 1),)) != Node("asdf", "texty", 1, 2)
+@test Node("asdf", "texty", 1, 2, (Node("bsdf", "texty", 1, 1),)) != Node("asdf", "texty", 1, 2, (Node("bsdf", "texty", 1, 2),)) 
+@test Node("asdf", "texty", 1, 2, (Node("bsdf", "texty", 1, 2),)) == Node("asdf", "texty", 1, 2, (Node("bsdf", "texty", 1, 2),)) 
+@test Node("asdf", "texty", 1, 2, (Node("bsdf", "texty", 1, 2),)) != EmptyNode()
 @test EmptyNode() == EmptyNode()
 ########### TEST
 
 ####################### TEST
-showerror(STDOUT, VisitationError(n2, txt, BoundsError()))
+showerror(STDOUT, VisitationError(n2, BoundsError()))
 [println(n) for n in n2]  # iteration
 ####################### TEST
 
 ####################### TEST
 type TestVisitor <: NodeVisitor end
-visit(v::TestVisitor, f::String, n::ParentNode{:lit}, visited_children) = lift_child(v,f,n,visited_children)
-visit(v::TestVisitor, f::String, n::ChildlessNode{:generic}, _) = nodetext(n, f)
-@test Nodes.visit_on_the_way_down(TestVisitor(), "asdf", Node("lit", 1, 2)) == []
-@test visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
-@test nodetext(Node("generic", 1, 2), "asdf") == "as"
-@test visit(TestVisitor(), "asdf", Node("generic", 1, 2)) == "as"
-@test visit(TestVisitor(), "asdf", Node("lit", 1, 2, (Node("generic", 1, 2),))) == "as"
-@test_throws visit(TestVisitor(), "asdf", Node("notimplemented", 1, 2)) == "as"
+visit(v::TestVisitor, n::ParentNode{:lit}, visited_children) = lift_child(v,n,visited_children)
+visit(v::TestVisitor, n::LeafNode{:generic}, _) = nodetext(n)
+@test Nodes.visit_on_the_way_down(TestVisitor(), Node("lit", "texty", 1, 2)) == []
+@test visit(TestVisitor(), Node("generic", "asdf", 1, 2)) == "as"
+@test nodetext(Node("generic", "asdf", 1, 2)) == "as"
+@test visit(TestVisitor(), Node("generic", "asdf", 1, 2)) == "as"
+@test visit(TestVisitor(), Node("lit", "asdf", 1, 2, (Node("generic", "asdf", 1, 2),))) == "as"
+@test_throws visit(TestVisitor(), Node("notimplemented", "asdf", 1, 2)) == "as"
 ####################### TEST
+
+s = "ελληνική"
+nu = Node("", s, 1, 2)
+xdump(nu)
+@test pos(nu) == 1
+@test _end(nu) == 2
+@test length(nu.match) == 2
+nu2 = Node("",s, 2, 1)
+@test pos(nu2) == 2
+@test _end(nu2) == 1
+@test length(nu2.match) == 0
+nu3 = Node("",s, 2, 2)
+@test pos(nu2) == 2
+@test _end(nu3) == 2
+@test length(nu3.match) == 1
+
 
 end

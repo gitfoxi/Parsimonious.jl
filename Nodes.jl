@@ -2,120 +2,67 @@
 module Nodes
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export name, NodeText, length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, ChildlessNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
+export LeafNode, name, NodeText, length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
 
 # I don't think EmptyNodes ever go in the tree. They are just used as a sort of
 # error message. You return an EmptyNode when you fail to match, for example.
 
-immutable ZeroLengthMatch
-    pos::Int
-end
-
-immutable OneOrMoreMatch
-    start::Int
-    _end::Int
-
-    function OneOrMoreMatch(start::Int, _end::Int)
-        #@assert start > 0
-        #@assert _end <= length(fulltext)
-        #@assert _end >= start
-        new(start, _end)
-    end
-end
-
-Match = Union(ZeroLengthMatch, OneOrMoreMatch)
-
 abstract MatchNode
 
 immutable ParentNode{T} <: MatchNode
-    match::Match
+    match::SubString
     children::Tuple
 
     # TODO: More specific type for children
     # Array{AbstractNode, 1} or Array{Node, 1} or Array{Node{:}} don't seem to work
-    ParentNode(start::Int, _end::Int, children) = new(OneOrMoreMatch(start, _end), children)
-    ParentNode(pos::Int, children) = new(ZeroLengthMatch(pos), children)
 end
 
-immutable ChildlessNode{T} <: MatchNode
-    match::Match
-
-    ChildlessNode(start::Int, _end::Int) = new(OneOrMoreMatch(start, _end))
-    ChildlessNode(pos::Int) = new(ZeroLengthMatch(pos))
+immutable LeafNode{T} <: MatchNode
+    match::SubString
 end
 
 # Union does not serve my purposes
 # Node = Union(ParentNode, EmptyNode, RegexNode, ChildlessNode)
 # MatchNode = Union(ParentNode, ChildlessNode)
-LeafNode = Union(ChildlessNode)  # because I might want to specialize leaf types ...
 typealias EmptyNode Nothing
-AnyNode = Union(EmptyNode, ParentNode, ChildlessNode)
+AnyNode = Union(EmptyNode, ParentNode, LeafNode)
 
 # Convenience
 ## Parent
-function Node(T::String, start::Int, _end::Int, children)
-    if _end >= start
-        ParentNode{symbol(T)}(start, _end, children)
-    else
-        ParentNode{symbol(T)}(start, children)
-    end
+function Node(T::String, match::SubString, children)
+    ParentNode{symbol(T)}(match, children)
 end
 
-## Child
-function Node(T::String, start::Int, _end::Int)
-    if _end >= start
-        ChildlessNode{symbol(T)}(start, _end)
-    else
-        ChildlessNode{symbol(T)}(start)
-    end
+## Leaf
+function Node(T::String, match::SubString)
+    LeafNode{symbol(T)}(match)
 end
 
 # Empty
 Node() = nothing
 
-# NodeText a tuple of Node and FullText
-type NodeText
-    node::MatchNode
-    text::String
-end
-
-# Copy with new "name"
-ParentNode(T, n::MatchNode) = ParentNode(T, n.match, n.children)
-ChildlessNode(T, n::MatchNode) = ChildlessNode(T, n.match)
-
-textlength(node::MatchNode) = length(node.match)
-length(m::ZeroLengthMatch) = 0
-length(m::OneOrMoreMatch) = m._end - m.start + 1
-
-pos(m::ZeroLengthMatch) = m.pos
-pos(m::OneOrMoreMatch) = m.start
-range(m::ZeroLengthMatch) = m.pos:m.pos-1
-range(m::OneOrMoreMatch) = m.start:m._end
-text(nt::NodeText) = nt.text[range(nt.node.match)]
-
-function goodnode_iprint(io::IO, n::MatchNode, t::String, indent::ASCIIString = "")
+function goodnode_iprint(io::IO, n::MatchNode, indent::ASCIIString = "")
     # TODO: Right justify the text
-    nodeinfo = "$(pos(n.match)) $(typeof(n))"
-    nodetext = lpad("'$(text(NodeText(n,t)))'\n", 80 - length(indent) - length(nodeinfo))
+    nodeinfo = "$(pos(n)) $(typeof(n))"
+    nodetext = lpad("'$(n.match)'\n", 80 - length(indent) - length(nodeinfo))
     print(io, indent, nodeinfo, nodetext)
 end
 
-function iprint(io::IO, n::ParentNode, t::String, indent::ASCIIString = "")
-    goodnode_iprint(io, n, t, indent)
+function iprint(io::IO, n::ParentNode, indent::ASCIIString = "")
+    goodnode_iprint(io, n, indent)
     for c in n.children
-        iprint(io, c, t, indent * "  .  ")
+        iprint(io, c, indent * "  .  ")
     end
 end
 
-function iprint(io::IO, n::ChildlessNode, t::String, indent::ASCIIString = "")
-    goodnode_iprint(io, n, t, indent)
+function iprint(io::IO, n::LeafNode, indent::ASCIIString = "")
+    goodnode_iprint(io, n, indent)
 end
 
-show(io::IO, nt::NodeText) = iprint(io, nt.node, nt.text)
+show(io::IO, n::MatchNode) = iprint(io, n)
 
 type VisitationError <:Exception
     node
-    fulltext
     exc
 end
 
@@ -137,7 +84,7 @@ function showerror(io::IO, e::VisitationError)
     # TODO: showerror
     print(io, string(e.exc))
     print(io, "\nParse tree:\n")
-    print(io, prettily(e.node, e.fulltext, e.node))
+    print(io, prettily(e.node, e.node))
 end
 
 
@@ -150,10 +97,6 @@ function name(n::AnyNode)
     s[search(s, ':')+1:end-1]
 end
 
- function nodetext(n::MatchNode, fulltext::String)
-    text(NodeText(n,fulltext))
-end
-
 isempty(::EmptyNode) = true
 isempty(::AnyNode) = false
 
@@ -164,9 +107,9 @@ function base_isequal(a::MatchNode, b::MatchNode)
     true
 end
 
-isequal(a::ChildlessNode, b::ChildlessNode) = base_isequal(a::MatchNode, b::MatchNode)
-isequal(a::ParentNode, b::ChildlessNode) = false
-isequal(a::ChildlessNode, b::ParentNode) = false
+isequal(a::LeafNode, b::LeafNode) = base_isequal(a::MatchNode, b::MatchNode)
+isequal(a::ParentNode, b::LeafNode) = false
+isequal(a::LeafNode, b::ParentNode) = false
 
 function isequal(a::ParentNode, b::ParentNode)
     base_isequal(a, b) || return false
@@ -192,21 +135,21 @@ function errstring(testnode, errnode)
 end
 
 # I don't think empty nodes go in tree ... maybe delete this:
-function prettily(node::EmptyNode, fulltext, errnode::AnyNode=EmptyNode())
+function prettily(node::EmptyNode, errnode::AnyNode=EmptyNode())
     return "<empty>$(errstring(node, errnode))"
 end
 
 # function prettily{T}(node::Node{T}, err::Node=Node())
-function prettily{T}(node::ParentNode{T}, fulltext, errnode::AnyNode=EmptyNode())
-    ret = ["<$(T) matching '$(escape_string(text(NodeText(node, fulltext))))'>$(errstring(node, errnode))"]
+function prettily{T}(node::ParentNode{T}, errnode::AnyNode=EmptyNode())
+    ret = ["<$(T) matching '$(escape_string(node.match))'>$(errstring(node, errnode))"]
     for child in node
-        push!(ret, indent(prettily(child, fulltext, errnode)))
+        push!(ret, indent(prettily(child, errnode)))
     end
     return join(ret, "\n")
 end
 
-function prettily{T}(node::ChildlessNode{T}, fulltext, errnode::AnyNode=EmptyNode())
-    "<$(T) matching '$(escape_string(text(NodeText(node,fulltext))))'>$(errstring(node, errnode))"
+function prettily{T}(node::LeafNode{T}, errnode::AnyNode=EmptyNode())
+    "<$(T) matching '$(escape_string(node.match))'>$(errstring(node, errnode))"
 end
 
 # TODO merge functions prettily and show which do very similar things
@@ -224,7 +167,7 @@ end
 done(n::ParentNode, state) = state > length(n.children)
 
 length(::EmptyNode) = 0
-length(::LeafNode) = 0  # Childless
+length(::LeafNode) = 0  # LeafNode
 
 #
 abstract NodeVisitor
@@ -238,29 +181,30 @@ abstract NodeVisitor
 # Refactor: Pass around fulltext with every call. Seems fun.
 # TODO: For child nodes
 
-function visit_on_the_way_down(v::NodeVisitor, fulltext::String, node::ParentNode)
-    return [visit(v, fulltext, n) for n in node]
+function visit_on_the_way_down(v::NodeVisitor, node::ParentNode)
+    return [visit(v, n) for n in node]
 end
 
 # No children
-visit_on_the_way_down(v::NodeVisitor, fulltext::String, node::LeafNode) = []
+visit_on_the_way_down(v::NodeVisitor, node::LeafNode) = []
 
-function visit(v::NodeVisitor, fulltext::String, node::MatchNode)
-    visited_children = visit_on_the_way_down(v, fulltext, node)
+function visit(v::NodeVisitor, node::MatchNode)
+    visited_children = visit_on_the_way_down(v, node)
     try
         # TODO: Move this whole thing to tuples -- but not now
-        @show v
-        @show name(node)
-        @show visited_children
-        @which visit(v, fulltext, node, visited_children)
-        returns = visit(v, fulltext, node, visited_children)
-        @show returns
+        # TODO: uncomment for debug mode
+#        @show v
+#        @show name(node)
+#        @show visited_children
+#        @which visit(v, node, visited_children)
+        returns = visit(v, node, visited_children)
+#        @show returns
         return returns
     catch e
         if isa(e, VisitationError)
             rethrow(e)
         else
-            rethrow(VisitationError(node, fulltext, e))
+            rethrow(VisitationError(node, e))
         end
     end
 end
@@ -274,16 +218,19 @@ function visit{T}(v::NodeVisitor, n::ParentNode{T}, visited_children)
 end
 
 ## conveniently replace a node with its own visited_children
-function lift_child(v::NodeVisitor, f::String, n::ParentNode, visited_children)
+function lift_child(v::NodeVisitor, n::ParentNode, visited_children)
     return visited_children[1]
 end
 
 # Refactoring convenience
 # TODO: test or remove
-_end(m::OneOrMoreMatch) = m._end
-_end(m::ZeroLengthMatch) = m.pos - 1
-_end(n::MatchNode) = _end(n.match)
-Node(T::String, ::String, start::Int, _end::Int, children::Tuple) = Node(T, start, _end, children)
-# Node(T::String, ::String, start::Int, _end::Int, children::Array) = Node(T, start, _end, tuple(children...))
-Node(T::String, ::String, start::Int, _end::Int) = Node(T, start, _end)
+Node(T::String, fulltext::String, start::Int, _end::Int, children::Tuple) = Node(T, SubString(fulltext, chr2ind(fulltext, start), chr2ind(fulltext, _end)), children)
+Node(T::String, fulltext::String, start::Int, _end::Int) = Node(T, SubString(fulltext, chr2ind(fulltext, start), chr2ind(fulltext, _end)))
+nodetext(n::MatchNode) = n.match
+# TODO: bug in SubString("asdf",3,2)
+_end(n::MatchNode) = pos(n) + length(n.match) - 1
+pos(n::MatchNode) = ind2chr(n.match.string, n.match.offset + (n.match.endof == 0 ? 0 : 1))
+
+textlength(node::MatchNode) = length(node.match)
+
 end

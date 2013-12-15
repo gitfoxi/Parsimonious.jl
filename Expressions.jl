@@ -164,10 +164,9 @@ type Regex <: Expression
 
     function Regex(pattern, name="", options="")
         original_re = pattern
-        options *= "a"
         @assert(length(pattern) > 0)
 
-        new(name, MyBaseRegex(pattern, options), options, original_re)
+        new(name, MyBaseRegex(pattern, options * "a"), options, original_re)
     end
 end
 

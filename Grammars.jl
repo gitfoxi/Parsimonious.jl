@@ -152,41 +152,41 @@ end
 
 function _expressions_from_rules(grammar::Grammar, rules::String)
     tree = parse(grammar, rules)
-    visit(RuleVisitor(), rules, tree)
+    visit(RuleVisitor(), tree)
 end
 
 # make boot grammar
 function _expressions_from_rules(rule_syntax::String)
     rules = boot_expressions()["rules"]
     rule_tree = parse(rules, rule_syntax)
-    exprs, default_rule = visit(RuleVisitor(), rule_syntax, rule_tree)
+    exprs, default_rule = visit(RuleVisitor(), rule_tree)
     return exprs, default_rule
 end
 
 type RuleVisitor <: NodeVisitor end
 
 # generic_visit
-visit(v::RuleVisitor, f::String, n::LeafNode) = n
-visit(v::RuleVisitor, f::String, n::ParentNode, visited_children) = visited_children
+visit(v::RuleVisitor, n::LeafNode) = n
+visit(v::RuleVisitor, n::ParentNode, visited_children) = visited_children
 
 # TODO: tuples not arrays for visited_children
-visit(v::RuleVisitor, f::String, n::ParentNode{:expression}, visited_children) = visited_children[1]
-visit(v::RuleVisitor, f::String, n::ParentNode{:term}, visited_children) = visited_children[1]
-visit(v::RuleVisitor, f::String, n::ParentNode{:atom}, visited_children) = visited_children[1]
+visit(v::RuleVisitor, n::ParentNode{:expression}, visited_children) = visited_children[1]
+visit(v::RuleVisitor, n::ParentNode{:term}, visited_children) = visited_children[1]
+visit(v::RuleVisitor, n::ParentNode{:atom}, visited_children) = visited_children[1]
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:parenthesized}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:parenthesized}, visited_children)
     left_paren, _1, expression, right_paren, _2 = visited_children
     expression
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:quantifier}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:quantifier}, visited_children)
     symbol, _ = visited_children
     symbol
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:quantified}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:quantified}, visited_children)
     atom, quantifier = visited_children
-    quantifier = nodetext(quantifier, f)[1]
+    quantifier = nodetext(quantifier)[1]
     if quantifier == '?'
         return Optional(atom)
     elseif quantifier == '*'
@@ -197,55 +197,55 @@ function visit(v::RuleVisitor, f::String, n::ParentNode{:quantified}, visited_ch
     error("How is '" * string(quantifier) * "' a quantifier to you?")
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:lookahead_term}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:lookahead_term}, visited_children)
     ampersand, term, _ = visited_children
     Lookahead(term)
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:not_term}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:not_term}, visited_children)
     exclamation, term, _ = visited_children
     Not(term)
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:rule}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:rule}, visited_children)
     label, equals, expression = visited_children
     expression.name = label
     expression
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:sequence}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:sequence}, visited_children)
     term, terms = visited_children
     Sequence(term, terms...)
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:ored}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:ored}, visited_children)
     term, terms, = visited_children
     OneOf(term, terms...)
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:or_term}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:or_term}, visited_children)
     slash, _, term = visited_children
     term
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:label}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:label}, visited_children)
     name, _ = visited_children
-    nodetext(name, f)
+    nodetext(name)
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:reference}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:reference}, visited_children)
     label, not_equals = visited_children
     LazyReference("", label)
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:regex}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:regex}, visited_children)
     tilde, literal, flags, _ = visited_children
     pattern = literal.literal
-    flags = lowercase(nodetext(flags, f))
+    flags = lowercase(nodetext(flags))
     Expressions.Regex(pattern, options=flags)
 end
 
-function visit(v::RuleVisitor, f::String, n::ParentNode{:literal}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:literal}, visited_children)
     spaceless_literal, _ = visited_children
     spaceless_literal
 end
@@ -314,7 +314,7 @@ function _resolve_refs(rule_map, expr, unwalked_names, walking_names)
 end
 
 # return dictionary of expressions and a rule name
-function visit(v::RuleVisitor, f::String, n::ParentNode{:rules}, visited_children)
+function visit(v::RuleVisitor, n::ParentNode{:rules}, visited_children)
     _, rules = visited_children
     rule_map = {expr.name => expr for expr in rules}
     unwalked_names = Set(collect(keys(rule_map))...)
@@ -327,8 +327,8 @@ function visit(v::RuleVisitor, f::String, n::ParentNode{:rules}, visited_childre
     return rule_map, rules[1]
 end
 
-visit(v::RuleVisitor, f::String, n::ParentNode{:spaceless_literal}, _) = Literal(nodetext(n, f)[2:end-1])
-visit(v::RuleVisitor, f::String, n::ChildlessNode{:spaceless_literal}) = Literal(nodetext(n, f)[2:end-1])
+visit(v::RuleVisitor, n::ParentNode{:spaceless_literal}, _) = Literal(nodetext(n)[2:end-1])
+visit(v::RuleVisitor, n::LeafNode{:spaceless_literal}) = Literal(nodetext(n)[2:end-1])
 
 rule_grammar = Grammar()  # Level 1 -- Bootstrap grammar parses rule_symtax
 rule_grammar = Grammar(rule_grammar, rule_syntax)  # Level 2 -- generated rule_grammar parses rule_syntax

@@ -123,7 +123,7 @@ text = ""
 #        """Test the 0 case of ``ZeroOrMore``; it should still return a node."""
 expr = ZeroOrMore(Literal("a"), name="zero")
 text = ""
-@test match(expr, text) == Node("zero", 1, 0)
+@test match(expr, text) == Node("zero", text, 1, 0)
 #match(expr,text) => ParentNode{:zero}(ZeroLengthMatch(1),())
 #Node("zero",text,1,0) => ChildlessNode{:zero}(ZeroLengthMatch(1))
 #Not sure if it should be Parent or Childless
@@ -300,6 +300,7 @@ end
 #    def test_unicode_crash(self):
 #        """Make sure matched unicode strings don"t crash ``__str__``."""
 grammar = Grammar(rule_gr, p"""string = ~"\S+" """)
+@show grammar.default_rule
 # TODO: <Node called 'string' matching '中'> -- something not right there
 println(parse(grammar, "中文"))
 #

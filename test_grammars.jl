@@ -131,7 +131,7 @@ import Grammars.visit
 # TODO: This causes an error because no visit(v, ::Node{:number}, ...) implemented but the error message is messed up.
 txt = """number = ~"[0-9]+"\n"""
 tree = parse(rule_grammar, txt)
-rules, default_rule = visit(RuleVisitor(), txt, tree)
+rules, default_rule = visit(RuleVisitor(), tree)
 
 text = "98"
 @test eq_(parse(default_rule, text), Node("number", text, 1, 2))
@@ -148,9 +148,9 @@ tree = parse(rule_grammar, txt)
 #  ({"boy"=>LazyReference("boy")},LazyReference("boy"))
 # @test_throws visit(RuleVisitor(), tree)
 
-@test_throws visit(RuleVisitor(), txt, tree)  # ; debug=true)
+@test_throws visit(RuleVisitor(), tree)  # ; debug=true)
 try
-    visit(RuleVisitor(), txt, tree)
+    visit(RuleVisitor(), tree)
 catch e
     @test isa(e.exc, Grammars.UndefinedLabel)
 end
@@ -158,7 +158,7 @@ end
 # test optional(self):
 txt = """boy = "howdy"?\n"""
 tree = parse(rule_grammar, txt)
-rules, default_rule = visit(RuleVisitor(), txt, tree)
+rules, default_rule = visit(RuleVisitor(), tree)
 
 howdy = "howdy"
 
@@ -202,6 +202,7 @@ end
 
 @test lines[1] == "bold_text = bold_open text bold_close"
 @show """text = ~"[A-Z 0-9]*"is"""
+@show lines
 @test in("""text = ~"[A-Z 0-9]*"is""", lines)
 @test in(s"""bold_open = "((" """, lines)
 @test in(s"""bold_close = "))" """, lines)
@@ -300,7 +301,7 @@ grammar = Grammar("""sequence = "chitty" (" " "bang")+""")
 
 s = "chitty bang bang"
 # TODO: println(NodeText(parse(grammar, s), s))  -- rather akward syntax
-println(NodeText(parse(grammar, s), s))
+println(string(parse(grammar, s)))
 # TODO: give a shit
 #@test string(parse(grammar, s)) ==
 #"""<Node called 'sequence' matching 'chitty bang bang'>
