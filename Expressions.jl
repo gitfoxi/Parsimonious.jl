@@ -1,4 +1,6 @@
 
+# TODO: line and column give character offset not byte index
+
 module Expressions
 
 import Base: match, rsearch, length, showerror, isequal, show
@@ -38,13 +40,16 @@ function showerror(io::IO, e::IncompleteParseError)
     print_escaped(io, "Rule '$(e.expr.name)' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '$(e.text[e.pos+1:min(end,e.pos + 20)])' (line $(line(e)), column $(column(e))).", "")
 end
 
-line(e::ParseException) = 1 + count(e.text[1:e.pos-1]) do c c == '\n' end
+# TODO: replace all pos[:] with SubString
+line(e::ParseException) = 1 + count(SubString(e.text, 1, prevind(e.text, e.pos))) do c c == '\n' end
 
-column(e::ParseException) = e.pos - rsearch(e.text, '\n', e.pos - 1)
+column(e::ParseException) = ind2chr(e.text, e.pos - rsearch(e.text, '\n', prevind(e.text, e.pos)))
 
 function parse(expr::Expression, text::String, pos::Int=1)
     node = match(expr, text, pos)
-    if _end(node) != length(text)
+    #@show node
+    # workaround here
+    if max(0, _end(node)) != endof(text)
         throw(IncompleteParseError(text, expr, _end(node)))
     end
     node
@@ -121,9 +126,8 @@ end
 type Literal <: Expression
     literal::String
     name::String
-    length::Int
 
-    Literal(literal, name) = new(literal, name, length(literal))
+    Literal(literal, name) = new(literal, name)
 end
 
 # TODO: get rid of all keyword default constructors because slow
@@ -131,8 +135,8 @@ end
 Literal(literal::String; name::String="") = Literal(literal, name)
 
 function _uncached_match(literal::Literal, text::String, pos::Int, cache::Dict, err::ParseError)
-    if beginswith(SubString(text, pos, length(text)), literal.literal)
-        return Node(literal.name, text, pos, pos - 1 + literal.length)
+    if beginswith(SubString(text, pos, endof(text)), literal.literal)
+        return Node(literal.name, text, pos, prevind(text, pos + endof(literal.literal)))
     end
     EmptyNode()  # "Empty" node == no match
 end
@@ -183,7 +187,7 @@ function _uncached_match(regex::Regex, text::String, pos::Int, cache::Dict, err:
     if m == nothing
         return EmptyNode()
     end
-    Node(regex.name, text, pos, pos - 1 + length(m.match)) # no longer special , m)
+    Node(regex.name, text, pos, prevind(text, pos + endof(m.match))) # no longer special , m)
 end
 
 function _as_rhs(regex::Regex)
@@ -265,7 +269,7 @@ function _uncached_match(sequence::Sequence, text::String, pos::Int, cache::Dict
         length_of_sequence += textlength(node)
     end
     # Hooray! We got through all the members!
-    return Node(sequence.name, text, pos, pos + length_of_sequence - 1, tuple(children...))
+    return Node(sequence.name, text, pos, prevind(text, pos + length_of_sequence), tuple(children...))
 end
 
 function _as_rhs(sequence::Sequence)
@@ -310,7 +314,7 @@ Lookahead(members::Expression...; name::String="") = Lookahead(name, members...)
 function _uncached_match(self::Lookahead, text::String, pos::Int, cache::Dict, err::ParseError)
     node = _match(self.members[1], text, pos, cache, err)
     if !isempty(node)
-        return Node(self.name, text, pos, pos - 1)
+        return Node(self.name, text, pos, prevind(text, pos))
     end
     return EmptyNode()
 end
@@ -332,7 +336,7 @@ Not(members::Expression...; name::String="") = Not(name, members...)
 function _uncached_match(self::Not, text::String, pos::Int, cache::Dict, err::ParseError)
     node = _match(self.members[1], text, pos, cache, err)
     if isempty(node)
-        return Node(self.name, text, pos, pos - 1)
+        return Node(self.name, text, pos, prevind(text, pos))
     end
     return EmptyNode()
 end
@@ -354,7 +358,7 @@ Optional(members::Expression...; name::String="") = Optional(name, members...)
 function _uncached_match(self::Optional, text::String, pos::Int, cache::Dict, err::ParseError)
     node = _match(self.members[1], text, pos, cache, err)
     if isempty(node)
-        return Node(self.name, text, pos, pos - 1)
+        return Node(self.name, text, pos, prevind(text, pos))
     end
     return Node(self.name, text, pos, _end(node), (node,))
 end
@@ -380,8 +384,8 @@ function _uncached_match(self::ZeroOrMore, text::String, pos::Int, cache::Dict, 
     while true
         node = _match(self.members[1], text, new_pos, cache, err)
         if isempty(node) || textlength(node) == 0
-            first && return Node(self.name, text, pos, new_pos - 1)
-            return Node(self.name, text, pos, new_pos - 1, tuple(children...))
+            first && return Node(self.name, text, pos, prevind(text, new_pos))
+            return Node(self.name, text, pos, _end(children[end]), tuple(children...))
         end
         if first
             children = MatchNode[node]
@@ -432,7 +436,7 @@ function _uncached_match(self::OneOrMore, text::String, pos::Int, cache::Dict, e
         new_pos += len
     end
     if !first && length(children) >= self._min
-        return Node(self.name, text, pos, new_pos - 1, tuple(children...))
+        return Node(self.name, text, pos, prevind(text, new_pos), tuple(children...))
     end
     return EmptyNode()
 end

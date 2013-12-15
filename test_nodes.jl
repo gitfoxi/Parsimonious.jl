@@ -4,7 +4,7 @@
 module test_nodes
 
 using Base.Test
-# reload("Nodes.jl")  # for repl debugging reload things in the order they would call each other
+reload("Nodes.jl")  # for repl debugging reload things in the order they would call each other
 using Nodes
 import Nodes.visit  # for overloading
 import Nodes: errstring # for testing internal stuff
@@ -274,19 +274,28 @@ visit(v::TestVisitor, n::LeafNode{:generic}, _) = nodetext(n)
 ####################### TEST
 
 s = "ελληνική"
-nu = Node("", s, 1, 2)
-xdump(nu)
-@test pos(nu) == 1
-@test _end(nu) == 2
+nu = Node("", s, chr2ind(s, 1), chr2ind(s, 2))
+@test pos(nu) == chr2ind(s, 1)
+@test _end(nu) == chr2ind(s, 2)
+@test endof(nu.match) == chr2ind(s, 2)
 @test length(nu.match) == 2
-nu2 = Node("",s, 2, 1)
-@test pos(nu2) == 2
-@test _end(nu2) == 1
+
+nu2 = Node("",s, chr2ind(s, 2), chr2ind(s, 1))
+@test pos(nu2) == chr2ind(s, 2)
+@show _end(nu2)
+@show pos(nu2)
+@show chr2ind(s, 1)
+xdump(nu2)
+@show s[_end(nu2)]
+@test _end(nu2) == chr2ind(s, 1)
 @test length(nu2.match) == 0
-nu3 = Node("",s, 2, 2)
-@test pos(nu2) == 2
-@test _end(nu3) == 2
+@test endof(nu2.match) == 0
+@show chr2ind(s, 2)
+nu3 = Node("",s, chr2ind(s, 2), chr2ind(s, 2))
+@test pos(nu2) == chr2ind(s, 2)
+@test _end(nu3) == chr2ind(s, 2)
 @test length(nu3.match) == 1
+@test endof(nu3.match) == 1
 
 
 end

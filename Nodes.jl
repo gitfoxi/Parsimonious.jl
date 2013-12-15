@@ -2,7 +2,7 @@
 module Nodes
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export LeafNode, name, NodeText, length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength
+export LeafNode, name, NodeText, length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength, pos
 
 # I don't think EmptyNodes ever go in the tree. They are just used as a sort of
 # error message. You return an EmptyNode when you fail to match, for example.
@@ -224,13 +224,16 @@ end
 
 # Refactoring convenience
 # TODO: test or remove
-Node(T::String, fulltext::String, start::Int, _end::Int, children::Tuple) = Node(T, SubString(fulltext, chr2ind(fulltext, start), chr2ind(fulltext, _end)), children)
-Node(T::String, fulltext::String, start::Int, _end::Int) = Node(T, SubString(fulltext, chr2ind(fulltext, start), chr2ind(fulltext, _end)))
-nodetext(n::MatchNode) = n.match
-# TODO: bug in SubString("asdf",3,2)
-_end(n::MatchNode) = pos(n) + length(n.match) - 1
-pos(n::MatchNode) = ind2chr(n.match.string, n.match.offset + (n.match.endof == 0 ? 0 : 1))
+import Base.chr2ind
 
-textlength(node::MatchNode) = length(node.match)
+Node(T::String, fulltext::String, start::Int, endind::Int, children::Tuple) = Node(T, SubString(fulltext, start, endind), children)
+Node(T::String, fulltext::String, start::Int, endind::Int) = Node(T, SubString(fulltext, start, endind))
+_end(n::MatchNode) = n.match.endof == 0 ? prevind(n.match.string, pos(n) - 1) : n.match.offset + n.match.endof
+pos(n::MatchNode) = n.match.offset + (n.match.endof == 0 ? 0 : 1)
+# refactor pos -> ind since we deal in byte indecies now
+# refactor _end
+nodetext(n::MatchNode) = n.match
+
+textlength(node::MatchNode) = endof(node.match)
 
 end

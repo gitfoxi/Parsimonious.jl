@@ -9,20 +9,11 @@ using Base.Test
 using Nodes
 using Expressions
 using Grammars
+using Util
 
 type TestExpression <: Expression
     name
 end
-
-# Try examples that will work on both Boot Grammar and Rule Grammar on both
-boot_gr, rule_gr = Grammars.boot_grammar(), Grammar()
-for (rules, file) in zip((boot_gr, rule_gr), ("boot_expr", "rule_expr"))
-    print(IOString(), rules.default_rule)  # print no infinite loop
-end
-
-# parse / match don't crash
-parse(lookup(rule_gr, "rules"), Grammars.rule_syntax)
-match(lookup(rule_gr, "rules"), Grammars.rule_syntax)
 
 # function wrap so I can time running independent of compilation
 # function go()
@@ -34,6 +25,10 @@ end
 # -- Length Tests --
 
 # Literal tests
+@show m = match(Literal("hello"), "ehello", 2)
+@show m.match
+@show endof(m.match)
+@show textlength(match(Literal("hello"), "ehello", 2))
 @test len_eq(match(Literal("hello"), "ehello", 2), 5)
 # Not sure if it's possible to have a match-nothing literal
 # @test len_eq(match(Literal(""), ""), 0)
@@ -165,7 +160,15 @@ isequal(parse(expr, text), Node("more", text, 1, 2, (Node("lit", text, 1, 1), No
 #
 #        """
 
-# TODO: use this when Grammar is working
+# Try examples that will work on both Boot Grammar and Rule Grammar on both
+boot_gr, rule_gr = Grammars.boot_grammar(), Grammar()
+for (rules, file) in zip((boot_gr, rule_gr), ("boot_expr", "rule_expr"))
+    print(IOString(), rules.default_rule)  # print no infinite loop
+end
+
+# parse / match don't crash
+parse(lookup(rule_gr, "rules"), Grammars.rule_syntax)
+match(lookup(rule_gr, "rules"), Grammars.rule_syntax)
 
 #for g in [boot_gr, rule_gr]
 for g in [rule_gr]
@@ -301,8 +304,27 @@ end
 #        """Make sure matched unicode strings don"t crash ``__str__``."""
 grammar = Grammar(rule_gr, p"""string = ~"\S+" """)
 @show grammar.default_rule
-# TODO: <Node called 'string' matching '中'> -- something not right there
 println(parse(grammar, "中文"))
+
+grammar = Grammar(rule_gr, p"""string = ~"\S\S" """)
+@show grammar.default_rule
+println(parse(grammar, "中文"))
+
+grammar = Grammar(rule_gr, s"""string = ~"xx" """)
+@show grammar.default_rule
+println(parse(grammar, "xx"))
+
+grammar = Grammar(rule_gr, s"""string = ~"中文" """)
+@show grammar.default_rule
+println(parse(grammar, "中文"))
+
+grammar = Grammar(rule_gr, p"""string = "中文" """)
+@show grammar.default_rule
+# TODO: Failing parse grammar.
+println(parse(grammar, "中文"))
+
+# TODO: mix character width like as中文df
+
 #
 #    def test_unicode(self):
 #        """Smoke-test the conversion of expressions to bits of rules.
@@ -361,6 +383,7 @@ end
 @test parse(Sequence(Not(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, (Node("", "foo", 1, 0), Node("", "foo", 1, 3)))
 @test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "foo") == Node("", "foo", 1, 3, (Node("", "foo", 1, 0), Node("", "foo", 1, 3)))
 @test parse(Sequence(Optional(Literal("bar")), Literal("foo")), "barfoo") == Node("", "barfoo", 1, 6, (Node("", "barfoo", 1, 3, (Node("", "barfoo", 1, 3),)), Node("", "barfoo", 4, 6)))
+# TODO: mixed UTF8 for all these tests
 @show parse(ZeroOrMore(Literal("bar")), "")
 @test parse(ZeroOrMore(Literal("bar")), "") == Node("", "", 1, 0) # Again, not sure if it should have children
 @test parse(ZeroOrMore(Literal("bar")), "bar") == Node("", "bar", 1, 3, (Node("", "bar", 1, 3),))
