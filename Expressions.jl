@@ -442,8 +442,8 @@ function _uncached_match(self::OneOrMore, text::String, pos::Int, cache::Dict, e
 end
 
 type LazyReference <: Expression 
-    name
-    label
+    name::String
+    label::String
 end
 
 _as_rhs(lr::LazyReference) = "<LazyReference to $(lr.label)>"

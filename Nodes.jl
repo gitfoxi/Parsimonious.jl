@@ -2,7 +2,7 @@
 module Nodes
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export LeafNode, name, NodeText, length, _end, LeafNode, pprettily, RegexNode, AnyNode, MatchNode, ParentNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, visit_all, VisitationError, showerror, push!, lift_child, EmptyNode, textlength, pos
+export LeafNode, name, length, _end, LeafNode, pprettily, AnyNode, MatchNode, ParentNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, VisitationError, showerror, push!, lift_child, EmptyNode, textlength, pos
 
 # I don't think EmptyNodes ever go in the tree. They are just used as a sort of
 # error message. You return an EmptyNode when you fail to match, for example.
@@ -24,7 +24,7 @@ end
 # Union does not serve my purposes
 # Node = Union(ParentNode, EmptyNode, RegexNode, ChildlessNode)
 # MatchNode = Union(ParentNode, ChildlessNode)
-typealias EmptyNode Nothing
+typealias EmptyNode LeafNode{:ifeelsoempty}
 AnyNode = Union(EmptyNode, ParentNode, LeafNode)
 
 # Convenience
@@ -39,7 +39,8 @@ function Node(T::String, match::SubString)
 end
 
 # Empty
-Node() = nothing
+EmptyNode() = LeafNode{:ifeelsoempty}(SubString("", 1))
+Node() = EmptyNode()
 
 function goodnode_iprint(io::IO, n::MatchNode, indent::ASCIIString = "")
     # TODO: Right justify the text
@@ -97,7 +98,7 @@ function name(n::AnyNode)
     s[search(s, ':')+1:end-1]
 end
 
-isempty(::EmptyNode) = true
+isempty(::LeafNode{:ifeelsoempty}) = true
 isempty(::AnyNode) = false
 
 function base_isequal(a::MatchNode, b::MatchNode)
