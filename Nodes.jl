@@ -141,7 +141,7 @@ end
 
 # function prettily{T}(node::Node{T}, err::Node=Node())
 function prettily{T}(node::ParentNode{T}, errnode::AnyNode=EmptyNode())
-    ret = ["<$(T) matching '$(escape_string(node.match))'>$(errstring(node, errnode))"]
+    ret = ["<'$(T)' matching '$(escape_string(node.match))'>$(errstring(node, errnode))"]
     for child in node
         push!(ret, indent(prettily(child, errnode)))
     end
@@ -149,7 +149,7 @@ function prettily{T}(node::ParentNode{T}, errnode::AnyNode=EmptyNode())
 end
 
 function prettily{T}(node::LeafNode{T}, errnode::AnyNode=EmptyNode())
-    "<$(T) matching '$(escape_string(node.match))'>$(errstring(node, errnode))"
+    "<'$(T)' matching '$(escape_string(node.match))'>$(errstring(node, errnode))"
 end
 
 # TODO merge functions prettily and show which do very similar things
