@@ -23,45 +23,54 @@ type FirmwareCommand
     parameters
 end
 
+FirmwareCommand("FTST",true,[])
+
 txt = "FTST?"
-@show tree = parse(g, txt)
-pprettily(tree, txt)
+(tree = parse(g, txt))
+pprettily(tree)
 
 # new vararg visitor technolgy
-function visit_on_the_way_down2(v::NodeVisitor, fulltext::String, node::ParentNode)
-    return [go_visit(v, fulltext, n) for n in node]
+function visit_on_the_way_down2(v::NodeVisitor, node::ParentNode)
+    return [go_visit(v, n) for n in node]
 end
 
 # No children
-visit_on_the_way_down2(v::NodeVisitor, fulltext::String, node::LeafNode) = []
+visit_on_the_way_down2(v::NodeVisitor, node::LeafNode) = []
 
-function go_visit(v::NodeVisitor, fulltext::String, node::MatchNode)
-    visited_children = visit_on_the_way_down2(v, fulltext, node)
+function go_visit(v::NodeVisitor, node::MatchNode)
+    visited_children = visit_on_the_way_down2(v, node)
     try
-        # TODO: Move this whole thing to tuples -- but not now
-        @show v
-        @show name(node)
-        @show visited_children
-        @which visit2(v, fulltext, node, visited_children)
-        returns = visit2(v, fulltext, node, visited_children...)
+        # TODO: debug mode
+        x = @which visit2(v, node, visited_children...)
+        if x == nothing
+            warn("@which visit2(v, node, visited_children...) returned 'nothing'")
+            @show v
+            @show node
+            @show visited_children
+        else
+            println(x)
+        end
+        returns = visit2(v, node, visited_children...)
         @show returns
         return returns
     catch e
         if isa(e, VisitationError)
             rethrow(e)
         else
-            rethrow(VisitationError(node, fulltext, e))
+            rethrow(VisitationError(node, e))
         end
     end
 end
 
 
 type FwVis <: NodeVisitor end
-visit2(::FwVis, txt::String, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
-visit2(::FwVis, txt::String, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
-visit2(::FwVis, txt::String, n::LeafNode) = nodetext(n, txt)
-visit2(::FwVis, txt::String, n::ParentNode, visited_children) = visited_children
-@show fw = go_visit(FwVis(), txt, tree)
+visit2(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
+function visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool)
+    FirmwareCommand(command, isquery, [])
+end
+visit2(::FwVis, n::LeafNode) = nodetext(n)
+visit2(::FwVis, n::ParentNode, visited_children...) = visited_children
+@show fw = go_visit(FwVis(), tree)
 #@show visit2(FwVis(), txt, tree; debug=true)
 
 pause("Paused")
@@ -139,45 +148,45 @@ parse(g.exprs["litparam"], "P")
 
 # sample_text = "FTST?\n"
 tree = parse(firmware_grammar, sample_text)
-pprettily(tree, sample_text)
+pprettily(tree)
 
 # TODO: Doctest
 
 # TODO: Refactor: LeafNode -> LeafNode
 # TODO: Trace visitor
 
-function visit(::FirmwareVisitor, f, n::ParentNode{:statement}, visited_children)
+function visit(::FirmwareVisitor, n::ParentNode{:statement}, visited_children)
     _, command, isquery, parameters, _ = visited_children
     FirmwareCommand(command, isquery, parameters)
 end
 
-visit(::FirmwareVisitor, f::String, n::ParentNode{:isquery}, visited_children) = visited_children[1] == "?"
-visit(::FirmwareVisitor, f::String, n::LeafNode{:isquery}) = false
+visit(::FirmwareVisitor, n::ParentNode{:isquery}, visited_children) = visited_children[1] == "?"
+visit(::FirmwareVisitor, n::LeafNode{:isquery}) = false
 
-function visit(::FirmwareVisitor, f, n::ParentNode{:paramlist}, visited_children)
+function visit(::FirmwareVisitor, n::ParentNode{:paramlist}, visited_children)
     _, param, _, more_params = visited_children
     @show param more_params
     vcat([param], more_params)
 end
 
-function visit(::FirmwareVisitor, f, n::ParentNode{:more_params}, visited_children)
+function visit(::FirmwareVisitor, n::ParentNode{:more_params}, visited_children)
     [vc[3] for vc in visited_children]
 end
 
-visit(::FirmwareVisitor, f, n::ParentNode{:param}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, f, n::ParentNode{:nonemptyparam}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, f, n::ParentNode{:statements}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, f, n::ParentNode{:params}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, f::String, n::LeafNode{:noparams}) = []
-visit(::FirmwareVisitor, f, n::ParentNode{:oneparam}, visited_children) = [visited_children[2]]
-visit(::FirmwareVisitor, f, n::ParentNode{:litparam}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, f, n::ParentNode{:quotedparam}, visited_children) = visited_children[2]
-visit(::FirmwareVisitor, f, n::ParentNode{:parenthesizedparam}, visited_children) = visited_children[2]
-visit(::FirmwareVisitor, f, n::ParentNode{:emptyparam}, visited_children) = []
+visit(::FirmwareVisitor, n::ParentNode{:param}, visited_children) = visited_children[1]
+visit(::FirmwareVisitor, n::ParentNode{:nonemptyparam}, visited_children) = visited_children[1]
+visit(::FirmwareVisitor, n::ParentNode{:statements}, visited_children) = visited_children[1]
+visit(::FirmwareVisitor, n::ParentNode{:params}, visited_children) = visited_children[1]
+visit(::FirmwareVisitor, n::LeafNode{:noparams}) = []
+visit(::FirmwareVisitor, n::ParentNode{:oneparam}, visited_children) = [visited_children[2]]
+visit(::FirmwareVisitor, n::ParentNode{:litparam}, visited_children) = visited_children[1]
+visit(::FirmwareVisitor, n::ParentNode{:quotedparam}, visited_children) = visited_children[2]
+visit(::FirmwareVisitor, n::ParentNode{:parenthesizedparam}, visited_children) = visited_children[2]
+visit(::FirmwareVisitor, n::ParentNode{:emptyparam}, visited_children) = []
 
-visit(::FirmwareVisitor, f, n::ParentNode, visited_children) = visited_children
-visit(::FirmwareVisitor, f, n::LeafNode, visited_children) = nodetext(n, f)
-visit(::FirmwareVisitor, f::String, n::LeafNode) = nodetext(n, f)
+visit(::FirmwareVisitor, n::ParentNode, visited_children) = visited_children
+visit(::FirmwareVisitor, n::LeafNode, visited_children) = nodetext(n)
+visit(::FirmwareVisitor, n::LeafNode) = nodetext(n)
 
 firmware_statements = visit(FirmwareVisitor(), sample_text, tree)
 # TODO: make keyword arguments work right
