@@ -2,8 +2,7 @@
 println("Julia is Alive")
 time_julia_alive = time()
 
-using Util
-using Grammars
+using Parsimonious
 
 REPEAT = 20  # Repeat parse several times and take minimum as benchmark
 

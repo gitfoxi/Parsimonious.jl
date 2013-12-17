@@ -1,10 +1,8 @@
 """Tests to show that the benchmarks we based our speed optimizations on are
 still valid"""
 
-module test_benchmarks
-
-reload("Util.jl")
-using Util
+# reload("Util.jl")
+include("../src/Util.jl")
 # using Benchmark
 using Base.Test
 
@@ -100,5 +98,3 @@ reset_tcount()
 
 @time Trex(10)
 @show tcount
-
-end

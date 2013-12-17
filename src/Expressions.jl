@@ -1,11 +1,8 @@
 
 # TODO: line and column give character offset not byte index
 
-module Expressions
-
 import Base: match, rsearch, length, showerror, isequal, show
-using Nodes
-using Util
+
 export _Compound, LazyReference, unicode, IncompleteParseError, showerror, ParseError, Expression, Literal, Regex, Sequence, OneOf, Not, Optional, ZeroOrMore, OneOrMore, parse, Lookahead, isequal, @p_str, @p_mstr, show, as_rule, match
 
 abstract Expression # -ism
@@ -495,4 +492,3 @@ function show(io::IO, expr::Expression)
     reshow(io, expr, Set())
 end
 
-end

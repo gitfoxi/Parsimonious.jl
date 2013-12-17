@@ -1,12 +1,8 @@
 
-module test_firmware
-
-using Grammars
-using Nodes
-using Util
+using Parsimonious
+include("Util.jl")
 # TODO: How to have less import stuff?
-import Grammars.visit
-import Nodes.visit
+import Parsimonious.visit
 
 type FirmwareVisitor <: NodeVisitor end
 
@@ -24,12 +20,7 @@ function visit_on_the_way_down2(v::NodeVisitor, node::ParentNode)
     return [govisit(v, n) for n in node]
 end
 
-function visit_on_the_way_down2(v::NodeVisitor, node::ParentNode; debug=false)
-    return [govisit(v, n; debug=debug) for n in node]
-end
-
 # No children
-visit_on_the_way_down2(v::NodeVisitor, node::LeafNode; debug=false) = []
 visit_on_the_way_down2(v::NodeVisitor, node::LeafNode) = []
 
 # TODO: better debug mode that prints:
@@ -39,27 +30,111 @@ visit_on_the_way_down2(v::NodeVisitor, node::LeafNode) = []
 # Then you can just accept the default visit rules and go through
 # the debug to figure out how to process things
 #
-function govisit(v::NodeVisitor, node::MatchNode; debug=false)
-    if debug
-        visited_children = visit_on_the_way_down2(v, node; debug=true)
-    else
-        visited_children = visit_on_the_way_down2(v, node)
-    end
+function govisit(v::NodeVisitor, node::MatchNode)
+    visited_children = visit_on_the_way_down2(v, node)
     visited_children = filter(x -> x != nothing, visited_children)
     try
-        if debug
-            println("--------------------------------------")
-            which(visit2, v, node, visited_children...)
-            @show name(node)
-            @show visited_children
-            returns = visit2(v, node, visited_children...)
-            @show returns
-            println("--------------------------------------")
-            return returns
-        else
-            return visit2(v, node, visited_children...)
-        end
+        return visit2(v, node, visited_children...)
     catch e
+        if isa(e, VisitationError)
+            rethrow(e)
+        else
+            rethrow(VisitationError(node, e))
+        end
+    end
+end
+
+function whicht(io::IO, f, types)
+    for m in methods(f, types)
+        lsd = m.func.code::LambdaStaticData
+        d = f.env.defs
+        while !is(d,())
+            if is(d.func.code, lsd)
+                print(io, f.env.name)
+                show(io, d); println(io)
+                return
+            end
+            d = d.next
+        end
+    end
+end
+
+which(io::IO, f, args...) = whicht(io, f, map(a->(isa(a,Type) ? Type{a} : typeof(a)), args))
+
+function strwhich(f, args...)
+    io = IOString()
+    which(io, f, args...)
+    seekstart(io)
+    s = readline(io)
+    replace(s, r"\)[^)]*$", ")")
+end
+
+type PrettyTable
+    ncols::Int
+    chars_per_col
+    rows
+end
+
+PrettyTable(ncols) = PrettyTable(ncols, repeat([0], inner=[ncols]), Any[])
+function newrow(t::PrettyTable, row)
+    row = [chomp(col) for col in row]
+    push!(t.rows, row)
+    for (i, col) in enumerate(row)
+        t.chars_per_col[i] = max(t.chars_per_col[i], length(col))
+    end
+end
+# TODO: header/fields; column justification
+import Base.print
+function print(io::IO, t::PrettyTable)
+    horizl = "-" ^ (3 * t.ncols + sum(t.chars_per_col)) * "\n"
+    print(io, horizl)
+    for row in t.rows
+        for (i, col) in enumerate(row)
+            print(io, rpad(col, t.chars_per_col[i]))
+            print(io, " | ")
+        end
+        print(io, "\n")
+    end
+    print(io, horizl)
+end
+
+# TODO: Tutorial.jl
+# TODO: Pretty.jl
+
+#t = PrettyTable(3)
+#newrow(t, ["hi", "derp", "blergityblerg"])
+#newrow(t, ["derp", "do", strwhich(print, STDOUT, t)])
+#println(t)
+
+
+#f() = "hi"
+#println("strwhich(f)", strwhich(f))
+#println("strwhich(f, []...)", strwhich(f, []...))
+
+function debug_visit_on_the_way_down2(v::NodeVisitor, node::ParentNode, ptable, indent)
+    return [debug_govisit(v, n, ptable, indent) for n in node]
+end
+
+debug_visit_on_the_way_down2(v::NodeVisitor, node::LeafNode, ptable, indent) = []
+
+function debug_govisit(v::NodeVisitor, node::MatchNode, ptable=PrettyTable(3), indent="")
+    visited_children = debug_visit_on_the_way_down2(v, node, ptable, indent * " . ")
+    visited_children = filter(x -> x != nothing, visited_children)
+    try
+        whichvisitor = strwhich(visit2, v, node, visited_children...)
+        namenode = name(node)
+        strchildren = isa(node, LeafNode)   ?
+            "\"" * nodetext(node) * "\""    :
+            join([sprint(show, vc) for vc in visited_children], ", ")
+        returns = visit2(v, node, visited_children...)
+        returnstr = sprint(show, returns)
+        newrow(ptable,[indent * whichvisitor, namenode, strchildren * " -> " * returnstr])
+        if indent == ""
+            println(ptable)
+        end
+        return returns
+    catch e
+        println(ptable)
         if isa(e, VisitationError)
             rethrow(e)
         else
@@ -73,6 +148,7 @@ visit2(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
 visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
 visit2(::FwVis, n::LeafNode) = nodetext(n)
 visit2(::FwVis, n::ParentNode, visited_children...) = visited_children
+
 
 function tryit(txt)
     tree = parse(g, txt)
@@ -88,6 +164,7 @@ g = grammar"""
 
 txt = "FTST?"
 tree = parse(g, txt)
+debug_govisit(FwVis(), tree)
 
 tryit("FTST?")
 
@@ -316,5 +393,3 @@ firmware_statements = visit(FirmwareVisitor(), sample_text, tree)
 # firmware_statements = visit(FirmwareVisitor(), sample_text, tree; debug=true)
 
 @show firmware_statements
-
-end

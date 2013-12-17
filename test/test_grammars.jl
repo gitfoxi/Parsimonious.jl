@@ -1,15 +1,11 @@
 
-module test_grammars
-
 #reload("Nodes.jl")
 #reload("Expressions.jl")
-#reload("Grammars.jl")
+#reload("Parsimonious.jl")
 using Base.Test
 
-using Grammars
-using Expressions
-using Nodes
-using Util
+using Parsimonious
+# include("Util.jl")
 
 # BootstrappingGrammarTests
 #Tests for the expressions in the grammar that parses the grammar
@@ -125,8 +121,8 @@ Not everything was implemented yet, but it was a big milestone and a
 proof of concept.
 """
 
-import Grammars.RuleVisitor
-import Grammars.visit
+import Parsimonious.RuleVisitor
+import Parsimonious.visit
 
 # TODO: This causes an error because no visit(v, ::Node{:number}, ...) implemented but the error message is messed up.
 txt = """number = ~"[0-9]+"\n"""
@@ -152,7 +148,7 @@ tree = parse(rule_grammar, txt)
 try
     visit(RuleVisitor(), tree)
 catch e
-    @test isa(e.exc, Grammars.UndefinedLabel)
+    @test isa(e.exc, Parsimonious.UndefinedLabel)
 end
 
 # test optional(self):
@@ -365,4 +361,3 @@ parse(Grammar("""foo = ( ("c") )"""), "c")
 # test single_quoted_literals(self):
 parse(Grammar("""foo = 'a' '"'"""), s"""a" """)
 
-end

@@ -1,15 +1,10 @@
 
-module test_expressions
-
-reload("Nodes.jl")
-reload("Expressions.jl")
-reload("Grammars.jl")
+#reload("Nodes.jl")
+#reload("Expressions.jl")
+#reload("Parsimonious.jl")
 
 using Base.Test
-using Nodes
-using Expressions
-using Grammars
-using Util
+using Parsimonious
 
 type TestExpression <: Expression
     name
@@ -161,14 +156,14 @@ isequal(parse(expr, text), Node("more", text, 1, 2, (Node("lit", text, 1, 1), No
 #        """
 
 # Try examples that will work on both Boot Grammar and Rule Grammar on both
-boot_gr, rule_gr = Grammars.boot_grammar(), Grammar()
+boot_gr, rule_gr = Parsimonious.boot_grammar(), Grammar()
 for (rules, file) in zip((boot_gr, rule_gr), ("boot_expr", "rule_expr"))
     print(IOString(), rules.default_rule)  # print no infinite loop
 end
 
 # parse / match don't crash
-parse(lookup(rule_gr, "rules"), Grammars.rule_syntax)
-match(lookup(rule_gr, "rules"), Grammars.rule_syntax)
+parse(lookup(rule_gr, "rules"), Parsimonious.rule_syntax)
+match(lookup(rule_gr, "rules"), Parsimonious.rule_syntax)
 
 #for g in [boot_gr, rule_gr]
 for g in [rule_gr]
@@ -336,14 +331,14 @@ println(parse(grammar, "中文"))
 #        unicode(rule_grammar)
 
 mye = ParseError("foo\nfoo\n", TestExpression("tst"), 5)
-@test Expressions.line(mye) == 2
-@test Expressions.column(mye) == 1
+@test Parsimonious.line(mye) == 2
+@test Parsimonious.column(mye) == 1
 mye = ParseError("foo\nfoo\n", TestExpression("tst"), 4)
-@test Expressions.line(mye) == 1
-@test Expressions.column(mye) == 4
+@test Parsimonious.line(mye) == 1
+@test Parsimonious.column(mye) == 4
 myf = ParseError("foo\nfoo\n", TestExpression("tst"), 1)
-@test Expressions.line(myf) == 1
-@test Expressions.column(myf) == 1
+@test Parsimonious.line(myf) == 1
+@test Parsimonious.column(myf) == 1
 myio = IOString()
 showerror(myio, myf)
 seekstart(myio)
@@ -398,4 +393,3 @@ te = TestExpression("tst")
 # end  # function go()
 # go()
 
-end

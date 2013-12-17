@@ -1,15 +1,16 @@
 
-module Grammars
+# module Grammars
+module Parsimonious
 
-using Util
-using Nodes
-using Expressions
-import Nodes.visit # for overloading NodeVisitor
+include("Util.jl")
+include("Nodes.jl")
+include("Expressions.jl")
+# import Nodes.visit # for overloading NodeVisitor
 
 export Grammar, lookup, rule_grammar, parse, unicode, match,  @grammar_mstr
 
 # You have to import everything you want to overload and export
-import Expressions: parse, unicode, match
+# import Expressions: parse, unicode, match
 
 type Grammar
     rules::String
@@ -242,7 +243,7 @@ function visit(v::RuleVisitor, n::ParentNode{:regex}, visited_children)
     tilde, literal, flags, _ = visited_children
     pattern = literal.literal
     flags = lowercase(nodetext(flags))
-    Expressions.Regex(pattern, options=flags)
+    Parsimonious.Regex(pattern, options=flags)
 end
 
 function visit(v::RuleVisitor, n::ParentNode{:literal}, visited_children)

@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 
 # modularize so I can 'reload' in repl
-module test_nodes
-
 using Base.Test
-reload("Nodes.jl")  # for repl debugging reload things in the order they would call each other
-using Nodes
-import Nodes.visit  # for overloading
-import Nodes: errstring # for testing internal stuff
+# reload("Nodes.jl")  # for repl debugging reload things in the order they would call each other
+using Parsimonious
+import Parsimonious.visit  # for overloading
+# import Nodes: errstring # for testing internal stuff
 
 type HtmlFormatter <: NodeVisitor end
 
@@ -186,13 +184,13 @@ n2 = Node("myexpr", mytext, 5, 8, (n3, n3, n3, n3))
 @test length(n2) == 4
 
 # Print an error string when pretty printing tree traceback
-@test errstring(n, n2) == ""
-@test match(r"Error", errstring(n2, n2)) != nothing
-@test match(r"Error", errstring(n, n2)) == nothing
+@test Parsimonious.errstring(n, n2) == ""
+@test match(r"Error", Parsimonious.errstring(n2, n2)) != nothing
+@test match(r"Error", Parsimonious.errstring(n, n2)) == nothing
 
 # Indent nodes when pretty printing
-@test Nodes.indent(Nodes.indent("foo","|"),"|") == "||foo"
-@test Nodes.indent("foo\nbar","  ") == "  foo\n  bar"
+@test Parsimonious.indent(Parsimonious.indent("foo","|"),"|") == "||foo"
+@test Parsimonious.indent("foo\nbar","  ") == "  foo\n  bar"
 
 # TODO: test RegexNode
 
@@ -240,7 +238,7 @@ end
 ########### TEST
 @test isempty(n2) == false
 @test isempty(EmptyNode()) == true
-@test isempty(nothing) == true
+# @test isempty(nothing) == true
 @test isempty(Node("asdf", "asdf", 1, 0)) == false
 ########### TEST
 
@@ -265,7 +263,7 @@ showerror(STDOUT, VisitationError(n2, BoundsError()))
 type TestVisitor <: NodeVisitor end
 visit(v::TestVisitor, n::ParentNode{:lit}, visited_children) = lift_child(v,n,visited_children)
 visit(v::TestVisitor, n::LeafNode{:generic}, _) = nodetext(n)
-@test Nodes.visit_on_the_way_down(TestVisitor(), Node("lit", "texty", 1, 2)) == []
+@test Parsimonious.visit_on_the_way_down(TestVisitor(), Node("lit", "texty", 1, 2)) == []
 @test visit(TestVisitor(), Node("generic", "asdf", 1, 2)) == "as"
 @test nodetext(Node("generic", "asdf", 1, 2)) == "as"
 @test visit(TestVisitor(), Node("generic", "asdf", 1, 2)) == "as"
@@ -298,4 +296,3 @@ nu3 = Node("",s, chr2ind(s, 2), chr2ind(s, 2))
 @test endof(nu3.match) == 1
 
 
-end

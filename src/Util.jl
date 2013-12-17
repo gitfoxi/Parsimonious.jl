@@ -1,6 +1,4 @@
 
-module Util
-
 export pause, @assert_raises, @timeit, @p_str, @p_mstr, @dq_str, @sq_str, @s_mstr
 
 macro p_str(s) s end
@@ -46,4 +44,3 @@ macro timeit(run, setup, n)
     end
 end
 
-end

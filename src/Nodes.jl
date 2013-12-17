@@ -1,6 +1,4 @@
 
-module Nodes
-
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
 export LeafNode, name, length, _end, LeafNode, pprettily, AnyNode, MatchNode, ParentNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, VisitationError, showerror, push!, lift_child, EmptyNode, textlength, pos
 
@@ -237,4 +235,3 @@ nodetext(n::MatchNode) = n.match
 
 textlength(node::MatchNode) = endof(node.match)
 
-end
