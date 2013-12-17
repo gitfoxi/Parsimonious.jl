@@ -348,6 +348,8 @@ function unicode(g::Grammar)
     join([sexprs], "\n")
 end
 
-macro grammar_mstr(s) Grammar(rule_grammar, s) end
+# cheap
+cleanspace(s) = replace(replace(s, "\\n", "\n"), "\\t", "\t")
+macro grammar_mstr(s) Grammar(rule_grammar, cleanspace(s)) end
 
 end # module

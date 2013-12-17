@@ -11,48 +11,54 @@ import Nodes.visit
 type FirmwareVisitor <: NodeVisitor end
 
 
-g = grammar"""
-    statement = command isquery
-    command = ~"\w{4}"
-    isquery = "?"?
-    """
-
 type FirmwareCommand
-    command::ASCIIString
+    command::String
     isquery::Bool
     parameters
 end
 
 FirmwareCommand("FTST",true,[])
 
-txt = "FTST?"
-(tree = parse(g, txt))
-pprettily(tree)
-
-# new vararg visitor technolgy
+# TODO: RulesVisitor and test visitors to adopt new vararg visitor technolgy
 function visit_on_the_way_down2(v::NodeVisitor, node::ParentNode)
-    return [go_visit(v, n) for n in node]
+    return [govisit(v, n) for n in node]
+end
+
+function visit_on_the_way_down2(v::NodeVisitor, node::ParentNode; debug=false)
+    return [govisit(v, n; debug=debug) for n in node]
 end
 
 # No children
+visit_on_the_way_down2(v::NodeVisitor, node::LeafNode; debug=false) = []
 visit_on_the_way_down2(v::NodeVisitor, node::LeafNode) = []
 
-function go_visit(v::NodeVisitor, node::MatchNode)
-    visited_children = visit_on_the_way_down2(v, node)
+# TODO: better debug mode that prints:
+#   parse tree  --  rule --  visit(visitor, node, param, param, ...) -- return value
+# The tree can be upside down in Visitor order
+# Auto-spacing based on column matched.
+# Then you can just accept the default visit rules and go through
+# the debug to figure out how to process things
+#
+function govisit(v::NodeVisitor, node::MatchNode; debug=false)
+    if debug
+        visited_children = visit_on_the_way_down2(v, node; debug=true)
+    else
+        visited_children = visit_on_the_way_down2(v, node)
+    end
+    visited_children = filter(x -> x != nothing, visited_children)
     try
-        # TODO: debug mode
-        x = @which visit2(v, node, visited_children...)
-        if x == nothing
-            warn("@which visit2(v, node, visited_children...) returned 'nothing'")
-            @show v
-            @show node
+        if debug
+            println("--------------------------------------")
+            which(visit2, v, node, visited_children...)
+            @show name(node)
             @show visited_children
+            returns = visit2(v, node, visited_children...)
+            @show returns
+            println("--------------------------------------")
+            return returns
         else
-            println(x)
+            return visit2(v, node, visited_children...)
         end
-        returns = visit2(v, node, visited_children...)
-        @show returns
-        return returns
     catch e
         if isa(e, VisitationError)
             rethrow(e)
@@ -62,16 +68,133 @@ function go_visit(v::NodeVisitor, node::MatchNode)
     end
 end
 
-
 type FwVis <: NodeVisitor end
 visit2(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
-function visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool)
-    FirmwareCommand(command, isquery, [])
-end
+visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
 visit2(::FwVis, n::LeafNode) = nodetext(n)
 visit2(::FwVis, n::ParentNode, visited_children...) = visited_children
-@show fw = go_visit(FwVis(), tree)
+
+function tryit(txt)
+    tree = parse(g, txt)
+    println(tree)
+    println(govisit(FwVis(), tree; debug=true))
+end
+
+g = grammar"""
+    statement = command isquery
+    command = ~"\w{4}"
+    isquery = "?"?
+    """
+
+txt = "FTST?"
+tree = parse(g, txt)
+
+tryit("FTST?")
+
+# With out the '?' isquery is a leaf
+visit2(::FwVis, n::LeafNode{:isquery}) = false
+
+tryit("FTST")
 #@show visit2(FwVis(), txt, tree; debug=true)
+
+g = grammar"""
+    statements = (statement termination)+
+    statement = command isquery
+    command = ~"\w{4}"
+    isquery = "?"?
+    termination = ~'[;\n]'
+    """
+
+function fwtest(name, grammar, text)
+    tree = parse(g.exprs[name], text)
+    govisit(FwVis(), tree; debug=true)
+end
+
+import Base.isequal
+function isequal(a::FirmwareCommand, b::FirmwareCommand)
+    a.command == b.command &&
+    a.isquery == b.isquery &&
+    a.parameters == b.parameters
+end
+
+using Base.Test
+@test fwtest("statement", g, "FTST?") == FirmwareCommand("FTST",true,[])
+@test fwtest("statement", g, "FTST") == FirmwareCommand("FTST",false,[])
+
+
+tree = parse(g.exprs["statement"], "FTST?")
+@show govisit(FwVis(), tree)
+tree = parse(g.exprs["statement"], "FTST")
+@show govisit(FwVis(), tree)
+
+visit2(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
+@show fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
+
+g = grammar"""
+    statements = (statement termination)+
+    statement = command isquery params
+    command = ~"\w{4}"
+    isquery = "?"?
+    termination = ~'[;\n]'
+    params = more_params / one_param / no_params
+    even_more_params = (comma param)+
+    comma = ','
+    more_params = somespace param even_more_params
+    one_param = somespace param
+    param = ~'[^ \t,;\n]*'
+    no_params = ''
+    somespace = ~'[ \t]+'
+    """
+
+tree = parse(g, "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
+println(tree)
+
+visit2(::FwVis, n::LeafNode{:somespace}) = nothing
+@show fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
+
+visit2(::FwVis, n::LeafNode{:comma}) = nothing
+visit2(::FwVis, n::ParentNode{:even_more_params}, boxes) = [box for box in boxes]
+visit2(::FwVis, n::ParentNode{:more_params}, param, even_more_params) = vcat([param], even_more_params)
+visit2(::FwVis, n::ParentNode{:one_param}, param) = [param]
+visit2(::FwVis, n::LeafNode{:no_params}) = []
+visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params[1])
+
+@show fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
+@test fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;") == 
+        {FirmwareCommand("ASDF",false,[]),FirmwareCommand("ASDF",false,["1"]),FirmwareCommand("ASDF",false,{"1","2"}),FirmwareCommand("ASDF",false,["one"]),FirmwareCommand("ASDF",false,{"one","two"})}
+
+g = grammar"""
+    statements = (statement termination)+
+    statement = command isquery (somespace params)?
+    command = ~"\w{4}"
+    isquery = "?"?
+    termination = ~'[;\n]'
+    params = more_params / one_param / no_params
+    even_more_params = (comma param)+
+    comma = ','
+    more_params = param even_more_params
+    one_param = param
+    no_params = ''
+    somespace = ~'[ \t]+'
+    param = quoted / list / bare
+    bare = ~'[^ \t,;\n")(]*'
+    dq = '"'
+    quoted = dq ~'[^"]*' dq
+    open_paren = '('
+    close_paren = ')'
+    list = open_paren params close_paren
+    """
+
+# still works?
+# Now param has to be reboxed
+visit2(::FwVis, n::ParentNode{:topparams}, params...) = params
+visit2(::FwVis, n::ParentNode{:param}, param...) = param[1]
+println(parse(g, "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;"))
+@show fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
+@test fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;") == 
+        {FirmwareCommand("ASDF",false,[]),FirmwareCommand("ASDF",false,["1"]),FirmwareCommand("ASDF",false,{"1","2"}),FirmwareCommand("ASDF",false,["one"]),FirmwareCommand("ASDF",false,{"one","two"})}
+
+@show fwtest("statements", g, """ASDF one,"two",(),(one),(one,"two"),(one,("two",(three)));""")
 
 pause("Paused")
 
@@ -123,7 +246,7 @@ firmware_grammar_spec =
     quotedparam = '"' ~'[^"]*' '"'
     parenthesizedparam = '(' params ')'
     emptyparam = _   # not so sure about this one
-    termination = _ ~'[;\\n]'  # optional semicolon? seriously?
+    termination = _ ~'[;\\n]'
     isquery = '?'?
     whitespace = ~"[ \\t\\n]*"
     _ = ~"[ \\t]*"
