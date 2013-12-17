@@ -17,7 +17,6 @@ formats then you're doing it right. Thank you for your attention.
 
 using Parsimonious
 import Parsimonious.visit
-
 ```
 
 Sorry about `import Parsimonious.visit`. We're going to overload that function
@@ -43,7 +42,6 @@ type FirmwareCommand
     isquery::Bool
     parameters
 end
-
 ```
 
 We build on the regular expressions that we know and love. First, let's just
@@ -56,13 +54,15 @@ Into:
 ```jl
 
 FirmwareCommand("FTST",true,[])
-
 ```
 
 This is easily matched with a regex:
 
-    julia> match(r"(\w{4})(\??)", "FTST?")
-    RegexMatch("FTST?", 1="FTST", 2="?")
+```jl
+julia> match(r"(\w{4})(\??)", "FTST?")
+RegexMatch("FTST?", 1="FTST", 2="?")
+
+```
 
 And almost as easily with a grammar:
 
@@ -73,19 +73,37 @@ g = grammar"""
     command = ~"\w{4}"
     isquery = "?"?
     """
-
 ```
-"blerg" => "blerg"
-"derp" => "derp"
-    julia> tree = parse(g, "FTST?")
-    1 ParentNode{:statement}                                                'FTST?'
+```jl
+julia> tree = parse(g, "FTST?")
+1 ParentNode{:statement}                                                'FTST?'
   .  1 LeafNode{:command}                                                'FTST'
   .  5 ParentNode{:isquery}                                                 '?'
   .    .  5 LeafNode{:}                                                     '?'
 
 
-Huh. Let's look at this another way:
+```
 
+It's a parse tree. The goal is to fold it up.
+
+```jl
+
+type FwVis <: NodeVisitor end
+visit2(::FwVis, n::LeafNode) = nodetext(n)
+visit2(::FwVis, n::ParentNode, visited_children...) = visited_children
+```
+```jl
+julia> debug_govisit(FwVis(), tree)
+("FTST",("?",))
+----------------------------------------------------------------------------------------------------------
+ . visit2(::FwVis,n::LeafNode{T})                       | command   | "FTST" -> "FTST"                  | 
+ .  . visit2(::FwVis,n::LeafNode{T})                    |           | "?" -> "?"                        | 
+ . visit2(::FwVis,n::ParentNode{T},visited_children...) | isquery   | "?" -> ("?",)                     | 
+visit2(::FwVis,n::ParentNode{T},visited_children...)    | statement | "FTST", ("?",) -> ("FTST",("?",)) | 
+----------------------------------------------------------------------------------------------------------
+
+
+```
 ----------------------------------------------------------------------------------------------------------------------------------------
  . visit2(::FwVis,n::LeafNode{T})                                       | command   | "FTST" -> "FTST"                                | 
  .  . visit2(::FwVis,n::LeafNode{T})                                    |           | "?" -> "?"                                      | 

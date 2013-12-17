@@ -1,20 +1,32 @@
 
+module test_firmware
+
 # md""" -- markdown general discussion
 macro md_mstr(s) println(s) end
 # qc""" -- quote code -- run and print code -- don't print result
 macro qc_mstr(s)
     quote
-        println("```jl\n", $s, "\n```")
+        println("```jl\n", $s, "```")
         $(esc(Base.parse("begin " * s * " end")))
     end
 end
 
 # qcr""" -- quote code repl -- run and print code and result like it was run in
 # repl
-# TODO: ```jl -- highlight as julia code on github -- for qcr also?
+# TODO: shit. need to capture STDOUT here
 macro qcr_mstr(s)
-    :(println(replace(strip($s), r"^"m, "    julia> "),
-                "\n    ", repr(begin value = $(esc(Base.parse(s))) end)))
+    quote
+        oldstdout = STDOUT
+        rd, wr = redirect_stdout()
+        value = $(esc(Base.parse(s)))
+        println()
+        ioout = readavailable(rd)
+        redirect_stdout(oldstdout)
+        print("```jl\n",
+            replace(strip($s), r"^"m, "julia> "), "\n",
+            repr(value), "\n", ioout)
+        println("```")
+    end
 end
 
 md"""
@@ -98,19 +110,14 @@ g = grammar\"""
     \"""
 """
 
-lookup(g, "command")
-@show "blerg"
-tree = parse(g, "FTST?")
-@show "derp"
 qcr"""
 tree = parse(g, "FTST?")
 """
 
 md"""
-Huh. Let's look at this another way:
+It's a parse tree. The goal is to fold it up.
 """
 
-type FirmwareVisitor <: NodeVisitor end
 
 # TODO: RulesVisitor and test visitors to adopt new vararg visitor technolgy
 function visit_on_the_way_down2(v::NodeVisitor, node::ParentNode)
@@ -240,11 +247,21 @@ function debug_govisit(v::NodeVisitor, node::MatchNode, ptable=PrettyTable(3), i
     end
 end
 
+qc"""
 type FwVis <: NodeVisitor end
-visit2(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
-visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
 visit2(::FwVis, n::LeafNode) = nodetext(n)
 visit2(::FwVis, n::ParentNode, visited_children...) = visited_children
+"""
+
+# TODO: qcr fails with multiple commands. Make it work like qc
+# TODO: qcr doesn't indent output printed to STDOUT. Need to capture and indent or maybe just use ``` for now
+
+qcr"""
+debug_govisit(FwVis(), tree)
+"""
+
+visit2(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
+visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
 
 
 function tryit(txt)
@@ -452,6 +469,8 @@ pprettily(tree)
 # TODO: Refactor: LeafNode -> LeafNode
 # TODO: Trace visitor
 
+type FirmwareVisitor <: NodeVisitor end
+
 function visit(::FirmwareVisitor, n::ParentNode{:statement}, visited_children)
     _, command, isquery, parameters, _ = visited_children
     FirmwareCommand(command, isquery, parameters)
@@ -490,3 +509,4 @@ firmware_statements = visit(FirmwareVisitor(), sample_text, tree)
 # firmware_statements = visit(FirmwareVisitor(), sample_text, tree; debug=true)
 
 @show firmware_statements
+end
