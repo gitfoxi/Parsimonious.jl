@@ -1,19 +1,116 @@
 
+# md""" -- markdown general discussion
+macro md_mstr(s) println(s) end
+# qc""" -- quote code -- run and print code -- don't print result
+macro qc_mstr(s)
+    quote
+        println("```jl\n", $s, "\n```")
+        $(esc(Base.parse("begin " * s * " end")))
+    end
+end
+
+# qcr""" -- quote code repl -- run and print code and result like it was run in
+# repl
+# TODO: ```jl -- highlight as julia code on github -- for qcr also?
+macro qcr_mstr(s)
+    :(println(replace(strip($s), r"^"m, "    julia> "),
+                "\n    ", repr(begin value = $(esc(Base.parse(s))) end)))
+end
+
+md"""
+Parsimonious.jl
+===============
+
+PSA: When you learn that it is fun and easy to write parsers you will be
+tempted to invent a complex, heirarchical data format -- or worse a DSL.  Some
+dude on Reddit told me DSL stands for Dog Shit Language. As a professional who
+both works with DSLs and picks up dog shit on reg, I must say I find the
+comparison a little unfair to dog shit. The answer is almost always JSON, XML,
+[config] or CSV for data and some established language for whatever you are
+trying to express. 
+
+If you're writing parsers to rid the world of entrenched DSLs or arbitrary data
+formats then you're doing it right. Thank you for your attention.
+"""
+
+qc"""
 using Parsimonious
-include("Util.jl")
-# TODO: How to have less import stuff?
 import Parsimonious.visit
+"""
+# TODO: How to have less import stuff?
 
-type FirmwareVisitor <: NodeVisitor end
+md"""
+Sorry about `import Parsimonious.visit`. We're going to overload that function
+    shortly but we also want some default functionality.
 
+The key is to remain calm and organized at all times. Otherwise parser
+development will get away from you. Our Firmware Command DSL was designed by
+some fuckwit to communicate with an HP 93k tester. It looks like this:
 
+    FTST?
+    FTST P
+    SREC? (@)
+    SREC ACT,(@)
+    SVLR TIM,PRM,,"Vdd",1.3; FTST?
+    SHIT? "it's quoted",,(((FOO, BAR),(@@)),7,1.3),#9000000004asdf
+
+We'd like to get these commands into structure like:
+"""
+
+qc"""
 type FirmwareCommand
     command::String
     isquery::Bool
     parameters
 end
+"""
 
+md"""
+We build on the regular expressions that we know and love. First, let's just
+try to parse:
+
+    FTST?
+
+Into:
+"""
+
+qc"""
 FirmwareCommand("FTST",true,[])
+"""
+
+md"""
+This is easily matched with a regex:
+"""
+
+qcr"""
+match(r"(\w{4})(\??)", "FTST?")
+"""
+
+md"""
+And almost as easily with a grammar:
+"""
+
+qc"""
+g = grammar\"""
+    statement = command isquery
+    command = ~"\w{4}"
+    isquery = "?"?
+    \"""
+"""
+
+lookup(g, "command")
+@show "blerg"
+tree = parse(g, "FTST?")
+@show "derp"
+qcr"""
+tree = parse(g, "FTST?")
+"""
+
+md"""
+Huh. Let's look at this another way:
+"""
+
+type FirmwareVisitor <: NodeVisitor end
 
 # TODO: RulesVisitor and test visitors to adopt new vararg visitor technolgy
 function visit_on_the_way_down2(v::NodeVisitor, node::ParentNode)
