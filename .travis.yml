@@ -13,5 +13,5 @@ before_install:
 script:
     - julia -e 'versioninfo(); Pkg.init();'
     - mkdir -p ~/.julia/Parsimonious
-    - cp -R ./* ~/.julia/Parsimonious.jl/
+    - cp -R ./* ~/.julia/Parsimonious/
     - julia ./run_tests.jl
