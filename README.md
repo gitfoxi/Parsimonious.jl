@@ -1,18 +1,18 @@
+
 Parsimonious.jl
 ===============
 
-PSA: When you learn that it is fun and easy to write parsers you will be
-tempted to invent a complex, heirarchical data format -- or worse a DSL.  Some
-dude on Reddit told me DSL stands for Dog Shit Language. As a professional who
-both works with DSLs and picks up dog shit on reg, I must say I find the
-comparison a little unfair to dog shit. The answer is almost always JSON, XML,
-[config] or CSV for data and some established language for whatever you are
-trying to express. 
+A port of [Parsimonious](https://github.com/erikrose/parsimonious). Thanks, [Erik](https://github.com/erikrose), for composing an outstanding tool.
 
-If you're writing parsers to rid the world of entrenched DSLs or arbitrary data
-formats then you're doing it right. Thank you for your attention.
+Porting Parsimonious to Julia is my Learn Julia project and it's been pretty interesting.
 
-    using Parsimonious
+```jl
+using Parsimonious
+import Parsimonious.visit
+```
+
+Sorry about `import Parsimonious.visit`. We're going to overload that function
+    shortly but we also want some default functionality.
 
 The key is to remain calm and organized at all times. Otherwise parser
 development will get away from you. Our Firmware Command DSL was designed by
@@ -27,11 +27,13 @@ some fuckwit to communicate with an HP 93k tester. It looks like this:
 
 We'd like to get these commands into structure like:
 
-    type FirmwareCommand
-        command::ASCIIString
-        isquery::Bool
-        parameters
-    end
+```jl
+type FirmwareCommand
+    command::String
+    isquery::Bool
+    parameters
+end
+```
 
 We build on the regular expressions that we know and love. First, let's just
 try to parse:
@@ -40,95 +42,100 @@ try to parse:
 
 Into:
 
-    FirmwareCommand("FTST", true, [])
+```jl
+FirmwareCommand("FTST",true,[])
+```
 
 This is easily matched with a regex:
 
-    julia> match(r"(\w{4})(\??)", "FTST?")
-    RegexMatch("FTST?", 1="FTST", 2="?")
+```jl
+julia> match(r"(\w{4})(\??)", "FTST?")
+RegexMatch("FTST?", 1="FTST", 2="?")
+```
 
 And almost as easily with a grammar:
 
-    g = grammar"""
-        statement = command isquery
-        command = ~"\w{4}"
-        isquery = "?"?
-        """
+```jl
+g = grammar"""
+    statement = command isquery
+    command = ~"\w{4}"
+    isquery = "?"?
+    """
+```
+```jl
+julia> tree = parse(g, "FTST?")
+1 ParentNode{:statement}                                                'FTST?'
+  .  1 LeafNode{:command}                                                'FTST'
+  .  5 ParentNode{:isquery}                                                 '?'
+  .    .  5 LeafNode{:}                                                     '?'
+```
 
-    julia> @show tree = parse(g, "FTST?")
-    tree = parse(g,"FTST?") => ParentNode{:statement}(OneOrMoreMatch(1,5),(ChildlessNode{:command}(OneOrMoreMatch(1,4)),ParentNode{:isquery}(OneOrMoreMatch(5,5),(ChildlessNode{:}(OneOrMoreMatch(5,5)),))))
+It's a parse tree. The goal is to fold it up.
 
-Huh. Let's look at this another way:
+```jl
+type FwVis <: NodeVisitor end
+```
+```jl
+julia> debug_govisit(FwVis(), tree)
+("FTST",("?",))
+---------------------------------------------------------------------------------------------------------------
+ . visit(::NodeVisitor,n::LeafNode{T})                       | command   | "FTST" -> "FTST"                  | 
+ .  . visit(::NodeVisitor,n::LeafNode{T})                    |           | "?" -> "?"                        | 
+ . visit(::NodeVisitor,n::ParentNode{T},visited_children...) | isquery   | "?" -> ("?",)                     | 
+visit(::NodeVisitor,n::ParentNode{T},visited_children...)    | statement | "FTST", ("?",) -> ("FTST",("?",)) | 
+---------------------------------------------------------------------------------------------------------------
+```
 
-    julia> println(tree)
-    1 ParentNode{:statement}                                                'FTST?'
-      .  1 LeafNode{:command}                                                'FTST'
-      .  5 ParentNode{:isquery}                                                 '?'
-      .    .  5 LeafNode{:}                                                     '?'
+**Sorry if you're reading this on Github you'll have to scroll the debug left
+and right to see it. It's pretty wide. I don't know what to do about that.**
 
-That's better. But still not the structure we want. Let's write some visitors
-to fix it up.
+We haven't defined any visit methods but we get two for free. These fold the
+tree up into `("FTST",("?",))` which is almost useful, but not really what
+we want. Let's redefine those free rules so we can see what they do.
 
-    type FwVis <: NodeVisitor end
-    visit(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
-    visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
-    visit(::FwVis, n::LeafNode) = nodetext(n)
-    visit(::FwVis, n::ParentNode, visited_children...) = visited_children
+```jl
+visit(::FwVis, n::LeafNode) = nodetext(n)
+visit(::FwVis, n::ParentNode, visited_children...) = visited_children
+```
+```jl
+julia> debug_govisit(FwVis(), tree)
+("FTST",("?",))
+---------------------------------------------------------------------------------------------------------
+ . visit(::FwVis,n::LeafNode{T})                       | command   | "FTST" -> "FTST"                  | 
+ .  . visit(::FwVis,n::LeafNode{T})                    |           | "?" -> "?"                        | 
+ . visit(::FwVis,n::ParentNode{T},visited_children...) | isquery   | "?" -> ("?",)                     | 
+visit(::FwVis,n::ParentNode{T},visited_children...)    | statement | "FTST", ("?",) -> ("FTST",("?",)) | 
+---------------------------------------------------------------------------------------------------------
+```
 
-And sick them on the tree:
+Works the same. The `LeafNode` rule just returns whatever text the leaf rule
+matched. The `ParentNode` rule takes the text from one or more `LeafNode`s and
+returns a list. The list is in order. That's important.
 
-    julia> govisit(FwVis(), tree)
-    FirmwareCommand("FTST", true, [])
+Now, let's put the visitor to work doing our bidding.
 
-Nice. But what exactly did the visitor do? Let's visit in debug mode to see:
+```jl
+visit(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
+visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
+```
+```jl
+julia> debug_govisit(FwVis(), tree)
+FirmwareCommand("FTST",true,[])
+---------------------------------------------------------------------------------------------------------------------------------------
+ . visit(::FwVis,n::LeafNode{T})                                       | command   | "FTST" -> "FTST"                                | 
+ .  . visit(::FwVis,n::LeafNode{T})                                    |           | "?" -> "?"                                      | 
+ . visit(::FwVis,n::ParentNode{:isquery},questionmark)                 | isquery   | "?" -> true                                     | 
+visit(::FwVis,n::ParentNode{:statement},command::String,isquery::Bool) | statement | "FTST", true -> FirmwareCommand("FTST",true,[]) | 
+---------------------------------------------------------------------------------------------------------------------------------------
+```
 
-    julia> govisit(FwVis(), tree; debug=true)
+Cool. Now we're getting back `FirmwareCommand("FTST",true,[])` which is what we
+wanted. Of course, you won't want to see the debug info when you're done:
 
-This traces the visit calls which can be really usefull debugging.
-
-    visit(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
-    returns => "FTST"
-    visit(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
-    returns => "?"
-    visit(::FwVis,n::ParentNode{:isquery},questionmark) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:60
-    returns => true
-    visit(::FwVis,n::ParentNode{:statement},command::String,isquery::Bool) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:61
-    returns => FirmwareCommand("FTST",true,[])
-
-Let's take it step-by-step. `govisit` takes a visitor and a parse tree. It
-starts at a LeafNode and calls a visitor written for that specific node name.
-If the node doesn't have a name or there hasn't been a specific `visit` written
-for it then it falls back to a generic one like in this case:
-
-      .    .  5 LeafNode{:}                                                     '?'
-
-Gets visited by the generic:
-
-    visit(::FwVis, n::LeafNode) = nodetext(n)
-
-Which simply:
-
-    returns => "?"
-
-Returns the text.
-
-After all the leaves under a parent have been visited, the parent is visited,
-only this time the `visit` has additional arguments, one for whatever each leaf
-returned in order. So when we get to:
-
-      .  5 ParentNode{:isquery}                                                 '?'
-
-The Leaf under it has returned "?" so it calls the function:
-
-    visit(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
-
-Like this:
-
-    visit(FwVis,n,"?")
-
-Which:
-
-    returns => true
+```jl
+julia> govisit(FwVis(), tree)
+FirmwareCommand("FTST",true,[])
+```
 
 Ya dig? Okay, now we add features to the language. The grammar should already
 support:
@@ -137,33 +144,39 @@ support:
 
 Does it?
 
-    tree = parse(g, "FTST")
-    println(tree)
-
-    1 ParentNode{:statement}                                                 'FTST'
-      .  1 LeafNode{:command}                                                'FTST'
-      .  5 LeafNode{:isquery}                                                    ''
+```jl
+julia> tree = parse(g, "FTST")
+1 ParentNode{:statement}                                                 'FTST'
+  .  1 LeafNode{:command}                                                'FTST'
+  .  5 LeafNode{:isquery}                                                    ''
+```
 
 It does. Let's visit:
 
-    julia> govisit(FwVis(), tree; debug=true)
-    visit(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
-    returns => "FTST"
-    visit(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
-    returns => ""
-    visit(::FwVis,n::ParentNode{T},visited_children...) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:63
-    returns => ("FTST","")
+```jl
+julia> debug_govisit(FwVis(), tree)
+("FTST","")
+----------------------------------------------------------------------------------------------
+ . visit(::FwVis,n::LeafNode{T})                    | command   | "FTST" -> "FTST"          | 
+ . visit(::FwVis,n::LeafNode{T})                    | isquery   | "" -> ""                  | 
+visit(::FwVis,n::ParentNode{T},visited_children...) | statement | "FTST", "" -> ("FTST","") | 
+----------------------------------------------------------------------------------------------
+```
 
 Ohs nos! What happened? Looking carefully we see that `:isquery` is no-longer a
 ParentNode but a LeafNode because nothing matched below `isquery` (but
-`isquery` matched the nothing). So we add `visit`:
+`isquery` matched the nothing). So we add a `visit`:
 
-    visit(::FwVis, n::LeafNode{:isquery}) = false
+```jl
+visit(::FwVis, n::LeafNode{:isquery}) = false
+```
 
 No questionmark means no query. Let's try again.
 
-    julia> govisit(FwVis(), tree)
-    FirmwareCommand("FTST",false,[])
+```jl
+julia> govisit(FwVis(), tree)
+FirmwareCommand("FTST",false,[])
+```
 
 Great. How to recognize multiple statements? Noticing in the examples that
 statements can be separated by ';' or '\n', let's add a rule to recognize
@@ -177,65 +190,75 @@ And another one to recognize multiple statements:
 
 So now the grammar looks like:
 
-    g = grammar"""
-        statements = statement+
+```jl
+g = grammar"""
+        statements = (statement termination)+
         statement = command isquery
         command = ~"\w{4}"
         isquery = "?"?
-        termination = ~'[;\\n]'
+        termination = ~'[;\n]'
         """
+```
 
 It's important to notice that the grammar now matches `statements` instead of
 `statement` so our previous tests are now broken. Usually `parse` matches the
 first statement in the list, but for testing purposes you can parse against any
 of the statements. Let's check the old functionality:
 
-    julia> tree = parse(g.exprs["statement"], "FTST?")
-    julia> govisit(FwVis(), tree)
-    FirmwareCommand("FTST",true,[])
+```jl
+julia> govisit(FwVis(), parse(g.exprs["statement"], "FTST?"))
+FirmwareCommand("FTST",true,[])
+```
 
 Good. And the other one:
 
-    julia> tree = parse(g.exprs["statement"], "FTST")
-    julia> govisit(FwVis(), tree)
-    FirmwareCommand("FTST",false,[])
+```jl
+julia> govisit(FwVis(), parse(g.exprs["statement"], "FTST"))
+FirmwareCommand("FTST",false,[])
+```
+```jl
+using Base.Test
+```
+```jl
+function fwtest(name, grammar, text)
+    tree = parse(g.exprs[name], text)
+    govisit(FwVis(), tree)
+end
 
-Fine. Now would be a good time to start making tests to guard against
-regressions as we develop.
+import Base.isequal
+function isequal(a::FirmwareCommand, b::FirmwareCommand)
+    a.command == b.command &&
+    a.isquery == b.isquery &&
+    a.parameters == b.parameters
+end
 
-    function fwtest(name, grammar, text)
-        tree = parse(g.exprs[name], text)
-        govisit(FwVis(), tree)
-    end
-
-    import Base.isequal
-    function isequal(a::FirmwareCommand, b::FirmwareCommand)
-        a.command == b.command &&
-        a.isquery == b.isquery &&
-        a.parameters == b.parameters
-    end
-
-    using Base.Test
-    @test fwtest("statement", g, "FTST?") == FirmwareCommand("FTST",true,[])
-    @test fwtest("statement", g, "FTST") == FirmwareCommand("FTST",false,[])
+@test fwtest("statement", g, "FTST?") == FirmwareCommand("FTST",true,[])
+@test fwtest("statement", g, "FTST") == FirmwareCommand("FTST",false,[])
+```
 
 So we haven't lost ground. Now let's see if we can string some statements
 together:
 
-    fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
-
-Which gives:
-
-    ((FirmwareCommand("FTST",true,[]),";"),(FirmwareCommand("FTST",true,[]),";"),(FirmwareCommand("FTST",true,[]),"\n"),(FirmwareCommand("FTST",true,[]),"\n"),(FirmwareCommand("FTST",false,[]),";"),(FirmwareCommand("FTST",false,[]),"\n"))
+```jl
+julia> fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
+((FirmwareCommand("FTST",true,[]),";"),(FirmwareCommand("FTST",true,[]),";"),(FirmwareCommand("FTST",true,[]),"\n"),(FirmwareCommand("FTST",true,[]),"\n"),(FirmwareCommand("FTST",false,[]),";"),(FirmwareCommand("FTST",false,[]),"\n"))
+```
 
 Which almost looks good, but clearly we need to `visit` `statemets` differently
 to throw away the useless terminations and just return a list of statements.
 
-    visit(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
+```jl
+visit(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
+```
 
 Try it again:
 
-    {FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",false,[]),FirmwareCommand("FTST",false,[])}
+```jl
+julia> fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
+{FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",false,[]),FirmwareCommand("FTST",false,[])}
+```
+
+Nice. I wonder why sometimes list print in {} and other times in []. Oh well.
 
 There's more kinds of statements. Each can have zero one or more parameters. To
 match statements like:
@@ -258,121 +281,213 @@ Then we'd have a problem because no_params would always match and then we'd
 never look for one_param or more_params and we'd get a parsing error. Moving
 on:
 
-    statement = command isquery params
-    params = more_params / one_param / no_params
-    more_params = somespace param (',' param)+
-    one_param = somespace param
-    param = ~'[^ \t,;\n]*'
-    no_params = ''
+Also, we have to start thinking about whitespace. If a command is followed by
+parameters then there's at least one space separating them. But in the no
+parameter case you don't need a space. How about:
+
+    params = some_params / no_params
+    some_params = somespace (more_params / one_param)
     somespace = ~'[ \t]+'
 
-Let's look at the tree and then try to write some `visit` functions:
+```jl
+g = grammar"""
+    statements = (statement termination)+
+    command = ~"\w{4}"
+    isquery = "?"?
+    termination = ~'[;\n]'
 
-    julia> tree = parse(g, "ASDF;ASDF 1;ASDF 1,2;")
-    julia> println(tree)
+    ###### new stuff ##########################
+    statement = command isquery params
+    params = some_params / no_params
+    some_params = somespace (more_params / param)
+    more_params = param (comma param)+
+    param = ~'[^ \t,;\n]*'
+    no_params = ''
+    comma = ','
+    somespace = ~'[ \t]+'
+    """
+```
 
-It's looking a little more sophisticated:
+I don't really want to think about it so let's just look at debug and go from
+there.  
+```jl
+txt = "ASDF;ASDF 1;ASDF 1,2,3,4;"
+tree = parse(g, txt)
+```
+```jl
+julia> debug_govisit(FwVis(), tree)
+{("ASDF",false,("",)),("ASDF",false,((" ",("1",)),)),("ASDF",false,((" ",(("1",((",","2"),(",","3"),(",","4"))),)),))}
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ .  .  . visit(::FwVis,n::LeafNode{T})                                     | command     | "ASDF" -> "ASDF"                                                           | 
+ .  .  . visit(::FwVis,n::LeafNode{:isquery})                              | isquery     | "" -> false                                                                | 
+ .  .  .  . visit(::FwVis,n::LeafNode{T})                                  | no_params   | "" -> ""                                                                   | 
+ .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)               | params      | "" -> ("",)                                                                | 
+ .  . visit(::FwVis,n::ParentNode{T},visited_children...)                  | statement   | "ASDF", false, ("",) -> ("ASDF",false,("",))                               | 
+ .  . visit(::FwVis,n::LeafNode{T})                                        | termination | ";" -> ";"                                                                 | 
+ . visit(::FwVis,n::ParentNode{T},visited_children...)                     |             | ("ASDF",false,("",)), ";" -> (("ASDF",false,("",)),";")                    | 
+ .  .  . visit(::FwVis,n::LeafNode{T})                                     | command     | "ASDF" -> "ASDF"                                                           | 
+ .  .  . visit(::FwVis,n::LeafNode{:isquery})                              | isquery     | "" -> false                                                                | 
+ .  .  .  .  . visit(::FwVis,n::LeafNode{T})                               | somespace   | " " -> " "                                                                 | 
+ .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                            | param       | "1" -> "1"                                                                 | 
+ .  .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)         |             | "1" -> ("1",)                                                              | 
+ .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)            | some_params | " ", ("1",) -> (" ",("1",))                                                | 
+ .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)               | params      | (" ",("1",)) -> ((" ",("1",)),)                                            | 
+ .  . visit(::FwVis,n::ParentNode{T},visited_children...)                  | statement   | "ASDF", false, ((" ",("1",)),) -> ("ASDF",false,((" ",("1",)),))           | 
+ .  . visit(::FwVis,n::LeafNode{T})                                        | termination | ";" -> ";"                                                                 | 
+ . visit(::FwVis,n::ParentNode{T},visited_children...)                     |             | ("ASDF",false,((" ",("1",)),)), ";" -> (("ASDF",false,((" ",("1",)),)),";" | 
+                                                                           |             | )                                                                          | 
+ .  .  . visit(::FwVis,n::LeafNode{T})                                     | command     | "ASDF" -> "ASDF"                                                           | 
+ .  .  . visit(::FwVis,n::LeafNode{:isquery})                              | isquery     | "" -> false                                                                | 
+ .  .  .  .  . visit(::FwVis,n::LeafNode{T})                               | somespace   | " " -> " "                                                                 | 
+ .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                         | param       | "1" -> "1"                                                                 | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | comma       | "," -> ","                                                                 | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | param       | "2" -> "2"                                                                 | 
+ .  .  .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children... |             | ",", "2" -> (",","2")                                                      | 
+)                                                                          |             |                                                                            | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | comma       | "," -> ","                                                                 | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | param       | "3" -> "3"                                                                 | 
+ .  .  .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children... |             | ",", "3" -> (",","3")                                                      | 
+)                                                                          |             |                                                                            | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | comma       | "," -> ","                                                                 | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | param       | "4" -> "4"                                                                 | 
+ .  .  .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children... |             | ",", "4" -> (",","4")                                                      | 
+)                                                                          |             |                                                                            | 
+ .  .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)   |             | (",","2"), (",","3"), (",","4") -> ((",","2"),(",","3"),(",","4"))         | 
+ .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)      | more_params | "1", ((",","2"),(",","3"),(",","4")) -> ("1",((",","2"),(",","3"),(",","4" | 
+                                                                           |             | )))                                                                        | 
+ .  .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)         |             | ("1",((",","2"),(",","3"),(",","4"))) -> (("1",((",","2"),(",","3"),(","," | 
+                                                                           |             | 4"))),)                                                                    | 
+ .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)            | some_params | " ", (("1",((",","2"),(",","3"),(",","4"))),) -> (" ",(("1",((",","2"),(", | 
+                                                                           |             | ","3"),(",","4"))),))                                                      | 
+ .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)               | params      | (" ",(("1",((",","2"),(",","3"),(",","4"))),)) -> ((" ",(("1",((",","2"),( | 
+                                                                           |             | ",","3"),(",","4"))),)),)                                                  | 
+ .  . visit(::FwVis,n::ParentNode{T},visited_children...)                  | statement   | "ASDF", false, ((" ",(("1",((",","2"),(",","3"),(",","4"))),)),) -> ("ASDF | 
+                                                                           |             | ",false,((" ",(("1",((",","2"),(",","3"),(",","4"))),)),))                 | 
+ .  . visit(::FwVis,n::LeafNode{T})                                        | termination | ";" -> ";"                                                                 | 
+ . visit(::FwVis,n::ParentNode{T},visited_children...)                     |             | ("ASDF",false,((" ",(("1",((",","2"),(",","3"),(",","4"))),)),)), ";" -> ( | 
+                                                                           |             | ("ASDF",false,((" ",(("1",((",","2"),(",","3"),(",","4"))),)),)),";")      | 
+visit(::FwVis,n::ParentNode{:statements},statements...)                    | statements  | (("ASDF",false,("",)),";"), (("ASDF",false,((" ",("1",)),)),";"), (("ASDF" | 
+                                                                           |             | ,false,((" ",(("1",((",","2"),(",","3"),(",","4"))),)),)),";") -> {("ASDF" | 
+                                                                           |             | ,false,("",)),("ASDF",false,((" ",("1",)),)),("ASDF",false,((" ",(("1",((" | 
+                                                                           |             | ,","2"),(",","3"),(",","4"))),)),))}                                       | 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+```
 
-    1 ParentNode{:statements}                               'ASDF;ASDF 1;ASDF 1,2;'
-      .  1 ParentNode{:}                                                    'ASDF;'
-      .    .  1 ParentNode{:statement}                                       'ASDF'
-      .    .    .  1 LeafNode{:command}                                      'ASDF'
-      .    .    .  5 LeafNode{:isquery}                                          ''
-      .    .    .  5 ParentNode{:params}                                         ''
-      .    .    .    .  5 LeafNode{:no_params}                                   ''
-      .    .  5 LeafNode{:termination}                                          ';'
-      .  6 ParentNode{:}                                                  'ASDF 1;'
-      .    .  6 ParentNode{:statement}                                     'ASDF 1'
-      .    .    .  6 LeafNode{:command}                                      'ASDF'
-      .    .    .  10 LeafNode{:isquery}                                         ''
-      .    .    .  10 ParentNode{:params}                                      ' 1'
-      .    .    .    .  10 ParentNode{:one_param}                              ' 1'
-      .    .    .    .    .  10 LeafNode{:somespace}                            ' '
-      .    .    .    .    .  11 LeafNode{:param}                                '1'
-      .    .  12 LeafNode{:termination}                                         ';'
-      .  13 ParentNode{:}                                               'ASDF 1,2;'
-      .    .  13 ParentNode{:statement}                                  'ASDF 1,2'
-      .    .    .  13 LeafNode{:command}                                     'ASDF'
-      .    .    .  17 LeafNode{:isquery}                                         ''
-      .    .    .  17 ParentNode{:params}                                    ' 1,2'
-      .    .    .    .  17 ParentNode{:more_params}                          ' 1,2'
-      .    .    .    .    .  17 LeafNode{:somespace}                            ' '
-      .    .    .    .    .  18 LeafNode{:param}                                '1'
-      .    .    .    .    .  19 ParentNode{:even_more_params}                  ',2'
-      .    .    .    .    .    .  19 ParentNode{:}                             ',2'
-      .    .    .    .    .    .    .  19 LeafNode{:}                           ','
-      .    .    .    .    .    .    .  20 LeafNode{:param}                      '2'
-      .    .  21 LeafNode{:termination}                                         ';'
+Wow. The debug output barely fits on my 13-inch laptop screen. I wish I could
+come up with something more compact and just as useful, but this is addressing
+several common problems:
 
-This was a lot of rules to add at once and admittedly I had to do some trial
-and error with some things I hadn't thought through all the way. If it doesn't
-work, read the error messages. They try very hard to help you.
+* Parse not matching exactly the way I expected
+* Wrong `visit` method handles a node
 
-Okay, we'll need some `visit` functions to roll up `even_more_params`,
-`more_params`, `one_param` and we'll need to fix `statement` to account for
-it's new opperand `params`.
+If you have a better idea, let me know.
 
-One feature I forgot to mention -- because I just added it while typing the
-tutorial -- is that if `visit` returns `nothing` then it will get wiped from
-thing passed to it's parent's visit like it never happened. We can use this to
-get rid of useless `somespace`.
+`visit` time:
 
-    visit(::FwVis, n::LeafNode{:somespace}) = nothing
+```jl
+visit(::FwVis, n::LeafNode{:no_params}) = nothing
+visit(::FwVis, n::LeafNode{:comma}) = nothing
+visit(::FwVis, n::LeafNode{:somespace}) = nothing
+visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params)
+visit(::FwVis, n::ParentNode{:more_params}, param1::String, param2::String) = (param1, param2)
+visit(::FwVis, n::ParentNode{:more_params}, param::String, params::Tuple) = tuple(param, params...)
+visit(::FwVis, n::ParentNode, one_child) = one_child # don't rebox one child
+```
 
-Testing this it looks good though a little messed up because we haven't dealth
-with `visit`s to the other things:
+About now we realize, oh shit, things have gotten interesting. Julia's
+multiple-dispatch feature is really working hard for us.
 
-    julia> fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;")
-    fwtest("statements",g,"ASDF;ASDF 1;ASDF 1,2;") => {("ASDF",false,("",)),("ASDF",false,(("1",),)),("ASDF",false,(("1",((",","2"),)),))}
+First, we've overloaded one of the most generic visit functions just for the case when there's only one child.
 
-So, let's do that:
+    visit(::FwVis, n::ParentNode, one_child) = one_child # don't rebox one child
 
-    visit(::FwVis, n::LeafNode{:comma}) = nothing
-    visit(::FwVis, n::ParentNode{:even_more_params}, boxes) = [box for box in boxes]
-    visit(::FwVis, n::ParentNode{:more_params}, param, even_more_params) = vcat([param], even_more_params)
-    visit(::FwVis, n::ParentNode{:one_param}, param) = [param]
-    visit(::FwVis, n::LeafNode{:no_params}) = []
-    visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params[1])
+Remember, the original (and still existing) generic rule for ParentNode is:
 
-Obviously I didn't crap this out fully formed. I wrote and tested each line
-carefully refering back to the parse tree and the debug output.
+    visit(::FwVis, n::ParentNode, visited_children...) = visited_children
 
-Next we realize that there's different kinds of parameters. We're just
-supporting bare words, but you can also have quoted strings and nested,
-parenthesized lists. Updating the param rule to look like:
+Which basically means that several children will get boxed up. `"a", "b", "c"
+-> ("a", "b", "c")`. The problem is that there's these anonymous rules
+everywhere and when they get called with one child, they put it in a box. So
+after several iterations, you end up with `((("a",),),)`
 
-    param = bare / quoted / list
-    bare = ~'[^ \t,;\n")(]*'
-    dq = '"'
-    quoted = dq ~'[^"]' dq  # TODO: support escaped \" -- you know how
-    open_paren = '('
-    close_paren = ')'
-    list = open_paren params close_paren
+Also fun is using the type to fix behavior. For example:
 
-The whole grammar is getting quite long, but is still pretty easy to read and
-understand.
+    visit(::FwVis, n::ParentNode{:more_params}, param1::String, param2::String) = (param1, param2)
+    visit(::FwVis, n::ParentNode{:more_params}, param::String, params::Tuple) = tuple(param, params...)
 
-    g = grammar"""
-        statements = (statement termination)+
-        statement = command isquery params
-        command = ~"\w{4}"
-        isquery = "?"?
-        termination = ~'[;\n]'
-        params = more_params / one_param / no_params
-        even_more_params = (comma param)+
-        comma = ','
-        more_params = somespace param even_more_params
-        one_param = somespace param
-        no_params = ''
-        somespace = ~'[ \t]+'
-        param = bare / quoted / list
-        bare = ~'[^ \t,;\n")(]*'
-        dq = '"'
-        quoted = dq ~'[^"]' dq
-        open_paren = '('
-        close_paren = ')'
-        list = open_paren params close_paren
-        """
+We really want `more_params` to just give us a list of parameters, but since the rule is nested like so:
 
-As usual, we try it against a test string:
+    more_params = param (comma param)+
 
+`visit more_params` is sometimes being called with two individual parameters
+and sometimes with a parameter and another `more_params`. Using the type system
+this way we make sure that what comes out is always a flat list without
+having to think about it further.
+
+Finally, notice that several garbage tokens like `no_params`, `comma` and
+`some_space` return `nothing`. When a `visit` returns `nothing` we don't even
+send the `nothing` to the parent. It's just like it never happened which is
+good for taking out the trash.
+
+I'm a little nervous -- don't get me wrong -- relying so heavily on the
+vagaries of Julia's dispatch system for the programs logic. But it looks like
+it's working! Once you go hack you never go back.
+
+Oh, and obviously I didn't crap this out fully formed. I wrote and tested each line
+carefully refering back to the debug table.
+
+```jl
+julia> debug_govisit(FwVis(), tree)
+{FirmwareCommand("ASDF",false,()),FirmwareCommand("ASDF",false,"1"),FirmwareCommand("ASDF",false,("1","2","3","4"))}
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ .  .  . visit(::FwVis,n::LeafNode{T})                                     | command     | "ASDF" -> "ASDF"                                                           | 
+ .  .  . visit(::FwVis,n::LeafNode{:isquery})                              | isquery     | "" -> false                                                                | 
+ .  .  .  . visit(::FwVis,n::LeafNode{:no_params})                         | no_params   | "" -> nothing                                                              | 
+ .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)               | params      |  -> ()                                                                     | 
+ .  . visit(::FwVis,n::ParentNode{:statement},command::String,isquery::Boo | statement   | "ASDF", false, () -> FirmwareCommand("ASDF",false,())                      | 
+l,params)                                                                  |             |                                                                            | 
+ .  . visit(::FwVis,n::LeafNode{T})                                        | termination | ";" -> ";"                                                                 | 
+ . visit(::FwVis,n::ParentNode{T},visited_children...)                     |             | FirmwareCommand("ASDF",false,()), ";" -> (FirmwareCommand("ASDF",false,()) | 
+                                                                           |             | ,";")                                                                      | 
+ .  .  . visit(::FwVis,n::LeafNode{T})                                     | command     | "ASDF" -> "ASDF"                                                           | 
+ .  .  . visit(::FwVis,n::LeafNode{:isquery})                              | isquery     | "" -> false                                                                | 
+ .  .  .  .  . visit(::FwVis,n::LeafNode{:somespace})                      | somespace   | " " -> nothing                                                             | 
+ .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                            | param       | "1" -> "1"                                                                 | 
+ .  .  .  .  . visit(::FwVis,n::ParentNode{T},one_child)                   |             | "1" -> "1"                                                                 | 
+ .  .  .  . visit(::FwVis,n::ParentNode{T},one_child)                      | some_params | "1" -> "1"                                                                 | 
+ .  .  . visit(::FwVis,n::ParentNode{T},one_child)                         | params      | "1" -> "1"                                                                 | 
+ .  . visit(::FwVis,n::ParentNode{:statement},command::String,isquery::Boo | statement   | "ASDF", false, "1" -> FirmwareCommand("ASDF",false,"1")                    | 
+l,params)                                                                  |             |                                                                            | 
+ .  . visit(::FwVis,n::LeafNode{T})                                        | termination | ";" -> ";"                                                                 | 
+ . visit(::FwVis,n::ParentNode{T},visited_children...)                     |             | FirmwareCommand("ASDF",false,"1"), ";" -> (FirmwareCommand("ASDF",false,"1 | 
+                                                                           |             | "),";")                                                                    | 
+ .  .  . visit(::FwVis,n::LeafNode{T})                                     | command     | "ASDF" -> "ASDF"                                                           | 
+ .  .  . visit(::FwVis,n::LeafNode{:isquery})                              | isquery     | "" -> false                                                                | 
+ .  .  .  .  . visit(::FwVis,n::LeafNode{:somespace})                      | somespace   | " " -> nothing                                                             | 
+ .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                         | param       | "1" -> "1"                                                                 | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{:comma})              | comma       | "," -> nothing                                                             | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | param       | "2" -> "2"                                                                 | 
+ .  .  .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},one_child)          |             | "2" -> "2"                                                                 | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{:comma})              | comma       | "," -> nothing                                                             | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | param       | "3" -> "3"                                                                 | 
+ .  .  .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},one_child)          |             | "3" -> "3"                                                                 | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{:comma})              | comma       | "," -> nothing                                                             | 
+ .  .  .  .  .  .  .  .  . visit(::FwVis,n::LeafNode{T})                   | param       | "4" -> "4"                                                                 | 
+ .  .  .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},one_child)          |             | "4" -> "4"                                                                 | 
+ .  .  .  .  .  .  . visit(::FwVis,n::ParentNode{T},visited_children...)   |             | "2", "3", "4" -> ("2","3","4")                                             | 
+ .  .  .  .  .  . visit(::FwVis,n::ParentNode{:more_params},param::String, | more_params | "1", ("2","3","4") -> ("1","2","3","4")                                    | 
+params::(Any...,))                                                         |             |                                                                            | 
+ .  .  .  .  . visit(::FwVis,n::ParentNode{T},one_child)                   |             | ("1","2","3","4") -> ("1","2","3","4")                                     | 
+ .  .  .  . visit(::FwVis,n::ParentNode{T},one_child)                      | some_params | ("1","2","3","4") -> ("1","2","3","4")                                     | 
+ .  .  . visit(::FwVis,n::ParentNode{T},one_child)                         | params      | ("1","2","3","4") -> ("1","2","3","4")                                     | 
+ .  . visit(::FwVis,n::ParentNode{:statement},command::String,isquery::Boo | statement   | "ASDF", false, ("1","2","3","4") -> FirmwareCommand("ASDF",false,("1","2", | 
+l,params)                                                                  |             | "3","4"))                                                                  | 
+ .  . visit(::FwVis,n::LeafNode{T})                                        | termination | ";" -> ";"                                                                 | 
+ . visit(::FwVis,n::ParentNode{T},visited_children...)                     |             | FirmwareCommand("ASDF",false,("1","2","3","4")), ";" -> (FirmwareCommand(" | 
+                                                                           |             | ASDF",false,("1","2","3","4")),";")                                        | 
+visit(::FwVis,n::ParentNode{:statements},statements...)                    | statements  | (FirmwareCommand("ASDF",false,()),";"), (FirmwareCommand("ASDF",false,"1") | 
+                                                                           |             | ,";"), (FirmwareCommand("ASDF",false,("1","2","3","4")),";") -> {FirmwareC | 
+                                                                           |             | ommand("ASDF",false,()),FirmwareCommand("ASDF",false,"1"),FirmwareCommand( | 
+                                                                           |             | "ASDF",false,("1","2","3","4"))}                                           | 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+```
