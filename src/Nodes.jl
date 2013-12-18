@@ -1,6 +1,6 @@
 
 import Base: isequal, push!, length, start, next, done, match, show, print, showerror, isempty
-export LeafNode, name, length, _end, LeafNode, pprettily, AnyNode, MatchNode, ParentNode, Node, NodeVisitor, isempty, nodetext, print, show, visit, VisitationError, showerror, push!, lift_child, EmptyNode, textlength, pos
+export LeafNode, name, length, _end, LeafNode, pprettily, AnyNode, MatchNode, ParentNode, Node, NodeVisitor, isempty, nodetext, print, show, DEFUNCT_visit, VisitationError, showerror, push!, lift_child, EmptyNode, textlength, pos
 
 # I don't think EmptyNodes ever go in the tree. They are just used as a sort of
 # error message. You return an EmptyNode when you fail to match, for example.
@@ -180,15 +180,15 @@ abstract NodeVisitor
 # Refactor: Pass around fulltext with every call. Seems fun.
 # TODO: For child nodes
 
-function visit_on_the_way_down(v::NodeVisitor, node::ParentNode)
-    return [visit(v, n) for n in node]
+function DEFUNCT_visit_on_the_way_down(v::NodeVisitor, node::ParentNode)
+    return [DEFUNCT_visit(v, n) for n in node]
 end
 
 # No children
-visit_on_the_way_down(v::NodeVisitor, node::LeafNode) = []
+DEFUNCT_visit_on_the_way_down(v::NodeVisitor, node::LeafNode) = []
 
-function visit(v::NodeVisitor, node::MatchNode)
-    visited_children = visit_on_the_way_down(v, node)
+function DEFUNCT_visit(v::NodeVisitor, node::MatchNode)
+    visited_children = DEFUNCT_visit_on_the_way_down(v, node)
     try
         # TODO: Move this whole thing to tuples -- but not now
         # TODO: uncomment for debug mode
@@ -196,7 +196,7 @@ function visit(v::NodeVisitor, node::MatchNode)
 #        @show name(node)
 #        @show visited_children
 #        @which visit(v, node, visited_children)
-        returns = visit(v, node, visited_children)
+        returns = DEFUNCT_visit(v, node, visited_children)
 #        @show returns
         return returns
     catch e
@@ -209,7 +209,7 @@ function visit(v::NodeVisitor, node::MatchNode)
 end
 
 ## generic_visit -- not implemented in base class as it were
-function visit{T}(v::NodeVisitor, n::ParentNode{T}, visited_children)
+function DEFUNCT_visit{T}(v::NodeVisitor, n::ParentNode{T}, visited_children)
     # TODO: backtrace broken
     # TODO: backtrace works on Linux, broken on OSX only?
     println("Go implement visit(::$(string(typeof(v))), ::Node{$(name(n))})) right now!")
@@ -235,3 +235,136 @@ nodetext(n::MatchNode) = n.match
 
 textlength(node::MatchNode) = endof(node.match)
 
+##### new visitor ########
+
+# TODO: RulesVisitor and test visitors to adopt new vararg visitor technolgy
+function visit_on_the_way_down(v::NodeVisitor, node::ParentNode)
+    return [govisit(v, n) for n in node]
+end
+
+# No children
+visit_on_the_way_down(v::NodeVisitor, node::LeafNode) = []
+
+# TODO: better debug mode that prints:
+#   parse tree  --  rule --  visit(visitor, node, param, param, ...) -- return value
+# The tree can be upside down in Visitor order
+# Auto-spacing based on column matched.
+# Then you can just accept the default visit rules and go through
+# the debug to figure out how to process things
+#
+function govisit(v::NodeVisitor, node::MatchNode)
+    visited_children = visit_on_the_way_down(v, node)
+    visited_children = filter(x -> x != nothing, visited_children)
+    try
+        return visit(v, node, visited_children...)
+    catch e
+        if isa(e, VisitationError)
+            rethrow(e)
+        else
+            rethrow(VisitationError(node, e))
+        end
+    end
+end
+
+function whicht(io::IO, f, types)
+    for m in methods(f, types)
+        lsd = m.func.code::LambdaStaticData
+        d = f.env.defs
+        while !is(d,())
+            if is(d.func.code, lsd)
+                print(io, f.env.name)
+                show(io, d); println(io)
+                return
+            end
+            d = d.next
+        end
+    end
+end
+
+which(io::IO, f, args...) = whicht(io, f, map(a->(isa(a,Type) ? Type{a} : typeof(a)), args))
+
+function strwhich(f, args...)
+    io = IOString()
+    which(io, f, args...)
+    seekstart(io)
+    s = readline(io)
+    replace(s, r"\)[^)]*$", ")")
+end
+
+type PrettyTable
+    ncols::Int
+    chars_per_col
+    rows
+end
+
+PrettyTable(ncols) = PrettyTable(ncols, repeat([0], inner=[ncols]), Any[])
+function newrow(t::PrettyTable, row)
+    row = [chomp(col) for col in row]
+    push!(t.rows, row)
+    for (i, col) in enumerate(row)
+        t.chars_per_col[i] = max(t.chars_per_col[i], length(col))
+    end
+end
+# TODO: header/fields; column justification
+import Base.print
+function print(io::IO, t::PrettyTable)
+    horizl = "-" ^ (3 * t.ncols + sum(t.chars_per_col)) * "\n"
+    print(io, horizl)
+    for row in t.rows
+        for (i, col) in enumerate(row)
+            print(io, rpad(col, t.chars_per_col[i]))
+            print(io, " | ")
+        end
+        print(io, "\n")
+    end
+    print(io, horizl)
+end
+
+# TODO: Tutorial.jl
+# TODO: Pretty.jl
+
+#t = PrettyTable(3)
+#newrow(t, ["hi", "derp", "blergityblerg"])
+#newrow(t, ["derp", "do", strwhich(print, STDOUT, t)])
+#println(t)
+
+
+#f() = "hi"
+#println("strwhich(f)", strwhich(f))
+#println("strwhich(f, []...)", strwhich(f, []...))
+
+function debug_visit_on_the_way_down(v::NodeVisitor, node::ParentNode, ptable, indent)
+    return [debug_govisit(v, n, ptable, indent) for n in node]
+end
+
+debug_visit_on_the_way_down(v::NodeVisitor, node::LeafNode, ptable, indent) = []
+
+function debug_govisit(v::NodeVisitor, node::MatchNode, ptable=PrettyTable(3), indent="")
+    visited_children = debug_visit_on_the_way_down(v, node, ptable, indent * " . ")
+    visited_children = filter(x -> x != nothing, visited_children)
+    try
+        whichvisitor = strwhich(visit, v, node, visited_children...)
+        namenode = name(node)
+        strchildren = isa(node, LeafNode)   ?
+            "\"" * nodetext(node) * "\""    :
+            join([sprint(show, vc) for vc in visited_children], ", ")
+        returns = visit(v, node, visited_children...)
+        returnstr = sprint(show, returns)
+        newrow(ptable,[indent * whichvisitor, namenode, strchildren * " -> " * returnstr])
+        if indent == ""
+            println(ptable)
+        end
+        return returns
+    catch e
+        println(ptable)
+        if isa(e, VisitationError)
+            rethrow(e)
+        else
+            rethrow(VisitationError(node, e))
+        end
+    end
+end
+
+# Default visit methods
+visit(::NodeVisitor, n::LeafNode) = nodetext(n)
+visit(::NodeVisitor, n::ParentNode, visited_children...) = visited_children

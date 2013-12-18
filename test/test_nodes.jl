@@ -4,7 +4,7 @@
 using Base.Test
 # reload("Nodes.jl")  # for repl debugging reload things in the order they would call each other
 using Parsimonious
-import Parsimonious.visit  # for overloading
+import Parsimonious.DEFUNCT_visit  # for overloading
 # import Nodes: errstring # for testing internal stuff
 
 type HtmlFormatter <: NodeVisitor end
@@ -16,25 +16,25 @@ type HtmlFormatter <: NodeVisitor end
 #     def visit_bold_open(self, node, visited_children):
 #         return '<b>'
 
-visit(::HtmlFormatter, ::LeafNode{:bold_open}) = "<b>"
+DEFUNCT_visit(::HtmlFormatter, ::LeafNode{:bold_open}) = "<b>"
 
 #     def visit_bold_close(self, node, visited_children):
 #         return '</b>'
 #
 
-visit(::HtmlFormatter, ::LeafNode{:bold_close}) = "</b>"
+DEFUNCT_visit(::HtmlFormatter, ::LeafNode{:bold_close}) = "</b>"
 
 #     def visit_text(self, node, visited_children):
 #         """Return the text verbatim."""
 #         return node.text
 
-visit(::HtmlFormatter, node::LeafNode{:text}) = nodetext(node)
+DEFUNCT_visit(::HtmlFormatter, node::LeafNode{:text}) = nodetext(node)
 
 #
 #     def visit_bold_text(self, node, visited_children):
 #         return ''.join(visited_children)
 
-visit(::HtmlFormatter, ::ParentNode{:bold_text}, visited_children) = join(visited_children, "")
+DEFUNCT_visit(::HtmlFormatter, ::ParentNode{:bold_text}, visited_children) = join(visited_children, "")
 
 type ExplosiveFormatter <: NodeVisitor end
 
@@ -47,7 +47,7 @@ type ExplosiveFormatter <: NodeVisitor end
 #         raise ValueError
 
 # BoundsError is supposed to get wrapped with VisitationError
-visit(::ExplosiveFormatter, ::LeafNode{:boom}) = throw(BoundsError)
+DEFUNCT_visit(::ExplosiveFormatter, ::LeafNode{:boom}) = throw(BoundsError)
 
 #
 #
@@ -79,7 +79,7 @@ tree = Node("bold_text", text, 1, 9,
             (Node("bold_open", text, 1, 2),
               Node("text", text, 3, 7),
               Node("bold_close", text, 8, 9)))
-result = visit(HtmlFormatter(), tree)
+result = DEFUNCT_visit(HtmlFormatter(), tree)
 @test result == "<b>o hai</b>"
 
 
@@ -89,9 +89,9 @@ result = visit(HtmlFormatter(), tree)
 #                   Node('boom', '', 0, 0))
 
 n = Node("boom", "", 1, 0)
-@test_throws visit(ExplosiveFormatter(), n)
+@test_throws DEFUNCT_visit(ExplosiveFormatter(), n)
 try
-    visit(ExplosiveFormatter(), n)
+    DEFUNCT_visit(ExplosiveFormatter(), n)
 catch ex
     if isa(ex, VisitationError)
         @test true
@@ -195,7 +195,7 @@ n2 = Node("myexpr", mytext, 5, 8, (n3, n3, n3, n3))
 # TODO: test RegexNode
 
 type SomeVisitor <: NodeVisitor end
-@test_throws visit(SomeVisitor(), n2)
+@test_throws DEFUNCT_visit(SomeVisitor(), n2)
 @test lift_child(SomeVisitor(), n2, ["foo"]) == "foo"
 
 # keyword syntax
@@ -261,14 +261,14 @@ showerror(STDOUT, VisitationError(n2, BoundsError()))
 
 ####################### TEST
 type TestVisitor <: NodeVisitor end
-visit(v::TestVisitor, n::ParentNode{:lit}, visited_children) = lift_child(v,n,visited_children)
-visit(v::TestVisitor, n::LeafNode{:generic}, _) = nodetext(n)
+DEFUNCT_visit(v::TestVisitor, n::ParentNode{:lit}, visited_children) = lift_child(v,n,visited_children)
+DEFUNCT_visit(v::TestVisitor, n::LeafNode{:generic}, _) = nodetext(n)
 @test Parsimonious.visit_on_the_way_down(TestVisitor(), Node("lit", "texty", 1, 2)) == []
-@test visit(TestVisitor(), Node("generic", "asdf", 1, 2)) == "as"
+@test DEFUNCT_visit(TestVisitor(), Node("generic", "asdf", 1, 2)) == "as"
 @test nodetext(Node("generic", "asdf", 1, 2)) == "as"
-@test visit(TestVisitor(), Node("generic", "asdf", 1, 2)) == "as"
-@test visit(TestVisitor(), Node("lit", "asdf", 1, 2, (Node("generic", "asdf", 1, 2),))) == "as"
-@test_throws visit(TestVisitor(), Node("notimplemented", "asdf", 1, 2)) == "as"
+@test DEFUNCT_visit(TestVisitor(), Node("generic", "asdf", 1, 2)) == "as"
+@test DEFUNCT_visit(TestVisitor(), Node("lit", "asdf", 1, 2, (Node("generic", "asdf", 1, 2),))) == "as"
+@test_throws DEFUNCT_visit(TestVisitor(), Node("notimplemented", "asdf", 1, 2)) == "as"
 ####################### TEST
 
 s = "ελληνική"

@@ -13,7 +13,6 @@ end
 
 # qcr""" -- quote code repl -- run and print code and result like it was run in
 # repl
-# TODO: shit. need to capture STDOUT here
 macro qcr_mstr(s)
     quote
         oldstdout = STDOUT
@@ -24,10 +23,12 @@ macro qcr_mstr(s)
         redirect_stdout(oldstdout)
         print("```jl\n",
             replace(strip($s), r"^"m, "julia> "), "\n",
-            repr(value), "\n", ioout)
+            rstrip(repr(value) * "\n" * ioout))
         println("```")
     end
 end
+
+# TODO: qcd(command, test_return, test_stdout) -- doctest the command too.
 
 md"""
 Parsimonious.jl
@@ -118,139 +119,10 @@ md"""
 It's a parse tree. The goal is to fold it up.
 """
 
-
-# TODO: RulesVisitor and test visitors to adopt new vararg visitor technolgy
-function visit_on_the_way_down2(v::NodeVisitor, node::ParentNode)
-    return [govisit(v, n) for n in node]
-end
-
-# No children
-visit_on_the_way_down2(v::NodeVisitor, node::LeafNode) = []
-
-# TODO: better debug mode that prints:
-#   parse tree  --  rule --  visit(visitor, node, param, param, ...) -- return value
-# The tree can be upside down in Visitor order
-# Auto-spacing based on column matched.
-# Then you can just accept the default visit rules and go through
-# the debug to figure out how to process things
-#
-function govisit(v::NodeVisitor, node::MatchNode)
-    visited_children = visit_on_the_way_down2(v, node)
-    visited_children = filter(x -> x != nothing, visited_children)
-    try
-        return visit2(v, node, visited_children...)
-    catch e
-        if isa(e, VisitationError)
-            rethrow(e)
-        else
-            rethrow(VisitationError(node, e))
-        end
-    end
-end
-
-function whicht(io::IO, f, types)
-    for m in methods(f, types)
-        lsd = m.func.code::LambdaStaticData
-        d = f.env.defs
-        while !is(d,())
-            if is(d.func.code, lsd)
-                print(io, f.env.name)
-                show(io, d); println(io)
-                return
-            end
-            d = d.next
-        end
-    end
-end
-
-which(io::IO, f, args...) = whicht(io, f, map(a->(isa(a,Type) ? Type{a} : typeof(a)), args))
-
-function strwhich(f, args...)
-    io = IOString()
-    which(io, f, args...)
-    seekstart(io)
-    s = readline(io)
-    replace(s, r"\)[^)]*$", ")")
-end
-
-type PrettyTable
-    ncols::Int
-    chars_per_col
-    rows
-end
-
-PrettyTable(ncols) = PrettyTable(ncols, repeat([0], inner=[ncols]), Any[])
-function newrow(t::PrettyTable, row)
-    row = [chomp(col) for col in row]
-    push!(t.rows, row)
-    for (i, col) in enumerate(row)
-        t.chars_per_col[i] = max(t.chars_per_col[i], length(col))
-    end
-end
-# TODO: header/fields; column justification
-import Base.print
-function print(io::IO, t::PrettyTable)
-    horizl = "-" ^ (3 * t.ncols + sum(t.chars_per_col)) * "\n"
-    print(io, horizl)
-    for row in t.rows
-        for (i, col) in enumerate(row)
-            print(io, rpad(col, t.chars_per_col[i]))
-            print(io, " | ")
-        end
-        print(io, "\n")
-    end
-    print(io, horizl)
-end
-
-# TODO: Tutorial.jl
-# TODO: Pretty.jl
-
-#t = PrettyTable(3)
-#newrow(t, ["hi", "derp", "blergityblerg"])
-#newrow(t, ["derp", "do", strwhich(print, STDOUT, t)])
-#println(t)
-
-
-#f() = "hi"
-#println("strwhich(f)", strwhich(f))
-#println("strwhich(f, []...)", strwhich(f, []...))
-
-function debug_visit_on_the_way_down2(v::NodeVisitor, node::ParentNode, ptable, indent)
-    return [debug_govisit(v, n, ptable, indent) for n in node]
-end
-
-debug_visit_on_the_way_down2(v::NodeVisitor, node::LeafNode, ptable, indent) = []
-
-function debug_govisit(v::NodeVisitor, node::MatchNode, ptable=PrettyTable(3), indent="")
-    visited_children = debug_visit_on_the_way_down2(v, node, ptable, indent * " . ")
-    visited_children = filter(x -> x != nothing, visited_children)
-    try
-        whichvisitor = strwhich(visit2, v, node, visited_children...)
-        namenode = name(node)
-        strchildren = isa(node, LeafNode)   ?
-            "\"" * nodetext(node) * "\""    :
-            join([sprint(show, vc) for vc in visited_children], ", ")
-        returns = visit2(v, node, visited_children...)
-        returnstr = sprint(show, returns)
-        newrow(ptable,[indent * whichvisitor, namenode, strchildren * " -> " * returnstr])
-        if indent == ""
-            println(ptable)
-        end
-        return returns
-    catch e
-        println(ptable)
-        if isa(e, VisitationError)
-            rethrow(e)
-        else
-            rethrow(VisitationError(node, e))
-        end
-    end
-end
-
 qc"""
 type FwVis <: NodeVisitor end
-visit2(::FwVis, n::LeafNode) = nodetext(n)
-visit2(::FwVis, n::ParentNode, visited_children...) = visited_children
+visit(::FwVis, n::LeafNode) = nodetext(n)
+visit(::FwVis, n::ParentNode, visited_children...) = visited_children
 """
 
 # TODO: qcr fails with multiple commands. Make it work like qc
@@ -260,8 +132,8 @@ qcr"""
 debug_govisit(FwVis(), tree)
 """
 
-visit2(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
-visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
+visit(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
+visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
 
 
 function tryit(txt)
@@ -283,10 +155,10 @@ debug_govisit(FwVis(), tree)
 tryit("FTST?")
 
 # With out the '?' isquery is a leaf
-visit2(::FwVis, n::LeafNode{:isquery}) = false
+visit(::FwVis, n::LeafNode{:isquery}) = false
 
 tryit("FTST")
-#@show visit2(FwVis(), txt, tree; debug=true)
+#@show visit(FwVis(), txt, tree; debug=true)
 
 g = grammar"""
     statements = (statement termination)+
@@ -318,7 +190,7 @@ tree = parse(g.exprs["statement"], "FTST?")
 tree = parse(g.exprs["statement"], "FTST")
 @show govisit(FwVis(), tree)
 
-visit2(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
+visit(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
 @show fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
 
 g = grammar"""
@@ -340,15 +212,15 @@ g = grammar"""
 tree = parse(g, "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
 println(tree)
 
-visit2(::FwVis, n::LeafNode{:somespace}) = nothing
+visit(::FwVis, n::LeafNode{:somespace}) = nothing
 @show fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
 
-visit2(::FwVis, n::LeafNode{:comma}) = nothing
-visit2(::FwVis, n::ParentNode{:even_more_params}, boxes) = [box for box in boxes]
-visit2(::FwVis, n::ParentNode{:more_params}, param, even_more_params) = vcat([param], even_more_params)
-visit2(::FwVis, n::ParentNode{:one_param}, param) = [param]
-visit2(::FwVis, n::LeafNode{:no_params}) = []
-visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params[1])
+visit(::FwVis, n::LeafNode{:comma}) = nothing
+visit(::FwVis, n::ParentNode{:even_more_params}, boxes) = [box for box in boxes]
+visit(::FwVis, n::ParentNode{:more_params}, param, even_more_params) = vcat([param], even_more_params)
+visit(::FwVis, n::ParentNode{:one_param}, param) = [param]
+visit(::FwVis, n::LeafNode{:no_params}) = []
+visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params[1])
 
 @show fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
 @test fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;") == 
@@ -378,8 +250,8 @@ g = grammar"""
 
 # still works?
 # Now param has to be reboxed
-visit2(::FwVis, n::ParentNode{:topparams}, params...) = params
-visit2(::FwVis, n::ParentNode{:param}, param...) = param[1]
+visit(::FwVis, n::ParentNode{:topparams}, params...) = params
+visit(::FwVis, n::ParentNode{:param}, param...) = param[1]
 println(parse(g, "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;"))
 @show fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
 @test fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;") == 
@@ -471,42 +343,42 @@ pprettily(tree)
 
 type FirmwareVisitor <: NodeVisitor end
 
-function visit(::FirmwareVisitor, n::ParentNode{:statement}, visited_children)
+function DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:statement}, visited_children)
     _, command, isquery, parameters, _ = visited_children
     FirmwareCommand(command, isquery, parameters)
 end
 
-visit(::FirmwareVisitor, n::ParentNode{:isquery}, visited_children) = visited_children[1] == "?"
-visit(::FirmwareVisitor, n::LeafNode{:isquery}) = false
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:isquery}, visited_children) = visited_children[1] == "?"
+DEFUNCT_visit(::FirmwareVisitor, n::LeafNode{:isquery}) = false
 
-function visit(::FirmwareVisitor, n::ParentNode{:paramlist}, visited_children)
+function DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:paramlist}, visited_children)
     _, param, _, more_params = visited_children
     @show param more_params
     vcat([param], more_params)
 end
 
-function visit(::FirmwareVisitor, n::ParentNode{:more_params}, visited_children)
+function DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:more_params}, visited_children)
     [vc[3] for vc in visited_children]
 end
 
-visit(::FirmwareVisitor, n::ParentNode{:param}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, n::ParentNode{:nonemptyparam}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, n::ParentNode{:statements}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, n::ParentNode{:params}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, n::LeafNode{:noparams}) = []
-visit(::FirmwareVisitor, n::ParentNode{:oneparam}, visited_children) = [visited_children[2]]
-visit(::FirmwareVisitor, n::ParentNode{:litparam}, visited_children) = visited_children[1]
-visit(::FirmwareVisitor, n::ParentNode{:quotedparam}, visited_children) = visited_children[2]
-visit(::FirmwareVisitor, n::ParentNode{:parenthesizedparam}, visited_children) = visited_children[2]
-visit(::FirmwareVisitor, n::ParentNode{:emptyparam}, visited_children) = []
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:param}, visited_children) = visited_children[1]
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:nonemptyparam}, visited_children) = visited_children[1]
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:statements}, visited_children) = visited_children[1]
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:params}, visited_children) = visited_children[1]
+DEFUNCT_visit(::FirmwareVisitor, n::LeafNode{:noparams}) = []
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:oneparam}, visited_children) = [visited_children[2]]
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:litparam}, visited_children) = visited_children[1]
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:quotedparam}, visited_children) = visited_children[2]
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:parenthesizedparam}, visited_children) = visited_children[2]
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode{:emptyparam}, visited_children) = []
 
-visit(::FirmwareVisitor, n::ParentNode, visited_children) = visited_children
-visit(::FirmwareVisitor, n::LeafNode, visited_children) = nodetext(n)
-visit(::FirmwareVisitor, n::LeafNode) = nodetext(n)
+DEFUNCT_visit(::FirmwareVisitor, n::ParentNode, visited_children) = visited_children
+DEFUNCT_visit(::FirmwareVisitor, n::LeafNode, visited_children) = nodetext(n)
+DEFUNCT_visit(::FirmwareVisitor, n::LeafNode) = nodetext(n)
 
-firmware_statements = visit(FirmwareVisitor(), sample_text, tree)
+firmware_statements = DEFUNCT_visit(FirmwareVisitor(), sample_text, tree)
 # TODO: make keyword arguments work right
-# firmware_statements = visit(FirmwareVisitor(), sample_text, tree; debug=true)
+# firmware_statements = DEFUNCT_visit(FirmwareVisitor(), sample_text, tree; debug=true)
 
 @show firmware_statements
 end

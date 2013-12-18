@@ -122,12 +122,12 @@ proof of concept.
 """
 
 import Parsimonious.RuleVisitor
-import Parsimonious.visit
+import Parsimonious.DEFUNCT_visit
 
 # TODO: This causes an error because no visit(v, ::Node{:number}, ...) implemented but the error message is messed up.
 txt = """number = ~"[0-9]+"\n"""
 tree = parse(rule_grammar, txt)
-rules, default_rule = visit(RuleVisitor(), tree)
+rules, default_rule = DEFUNCT_visit(RuleVisitor(), tree)
 
 text = "98"
 @test eq_(parse(default_rule, text), Node("number", text, 1, 2))
@@ -144,9 +144,9 @@ tree = parse(rule_grammar, txt)
 #  ({"boy"=>LazyReference("boy")},LazyReference("boy"))
 # @test_throws visit(RuleVisitor(), tree)
 
-@test_throws visit(RuleVisitor(), tree)  # ; debug=true)
+@test_throws DEFUNCT_visit(RuleVisitor(), tree)  # ; debug=true)
 try
-    visit(RuleVisitor(), tree)
+    DEFUNCT_visit(RuleVisitor(), tree)
 catch e
     @test isa(e.exc, Parsimonious.UndefinedLabel)
 end
@@ -154,7 +154,7 @@ end
 # test optional(self):
 txt = """boy = "howdy"?\n"""
 tree = parse(rule_grammar, txt)
-rules, default_rule = visit(RuleVisitor(), tree)
+rules, default_rule = DEFUNCT_visit(RuleVisitor(), tree)
 
 howdy = "howdy"
 
