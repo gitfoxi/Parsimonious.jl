@@ -41,9 +41,15 @@ md"""
 Parsimonious.jl
 ===============
 
+[![Build Status](https://travis-ci.org/gitfoxi/Parsimonious.jl.png)](https://travis-ci.org/gitfoxi/Parsimonious.jl)
+
 A port of [Parsimonious](https://github.com/erikrose/parsimonious). Thanks, [Erik](https://github.com/erikrose), for composing an outstanding tool.
 
 Porting Parsimonious to Julia is my Learn Julia project and it's been pretty interesting.
+
+Let's Parse Some Dog Shit
+-------------------------
+
 """
 
 qc"""
