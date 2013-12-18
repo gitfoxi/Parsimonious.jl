@@ -295,9 +295,18 @@ type PrettyTable
     ncols::Int
     chars_per_col
     rows
+    display_width
 end
 
-PrettyTable(ncols) = PrettyTable(ncols, repeat([0], inner=[ncols]), Any[])
+function PrettyTable(ncols)
+    # TODO: many problems with `tput cols`
+    #  * Linux / OSX only
+    #  * What if the session changes size? (Should be in the print function)
+    #  * What if it's going to a text file?
+    term_width = int(readall(`tput cols`))
+    PrettyTable(ncols, repeat([0], inner=[ncols]), Any[], term_width - 3 * (ncols+1))
+end
+
 function newrow(t::PrettyTable, row)
     row = [chomp(col) for col in row]
     push!(t.rows, row)
@@ -305,17 +314,38 @@ function newrow(t::PrettyTable, row)
         t.chars_per_col[i] = max(t.chars_per_col[i], length(col))
     end
 end
-# TODO: header/fields; column justification
+# TODO: header/fields; column justification, wrapping columns, adjust
+# for width of verminal
 import Base.print
+
+function calc_display_chars_per_col(chars_per_col, display_width)
+    display_chars_per_col = copy(chars_per_col)
+    # Um why not just subtract one character from the longest column until it fits?
+    for i in sum(chars_per_col):-1:display_width
+        display_chars_per_col[indmax(display_chars_per_col)] -= 1
+    end
+    display_chars_per_col
+end
+
+# TODO: Unicode. Some function tells me how many display characters per unicode string.
+# TODO: Break lines in more friendly places like space or commas
+function print_columns(io::IO, t::PrettyTable, cols, display_chars_per_col)
+    cols = copy(cols)
+    while sum(map(length, cols)) > 0
+        for (i, (colwidth, col)) in enumerate(zip(display_chars_per_col, cols))
+            print(io, rpad(col[1:min(colwidth,end)], colwidth), " | ")
+            cols[i] = col[colwidth+1:]
+        end
+        println(io)
+    end
+end
+
 function print(io::IO, t::PrettyTable)
-    horizl = "-" ^ (3 * t.ncols + sum(t.chars_per_col)) * "\n"
+    display_chars_per_col = calc_display_chars_per_col(t.chars_per_col, t.display_width - 3 * t.ncols)
+    horizl = "-" ^ min(3 * t.ncols + sum(t.chars_per_col), t.display_width) * "\n"
     print(io, horizl)
     for row in t.rows
-        for (i, col) in enumerate(row)
-            print(io, rpad(col, t.chars_per_col[i]))
-            print(io, " | ")
-        end
-        print(io, "\n")
+        print_columns(io, t, row, display_chars_per_col)
     end
     print(io, horizl)
 end

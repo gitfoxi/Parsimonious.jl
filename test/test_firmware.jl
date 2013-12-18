@@ -20,6 +20,7 @@ macro qcr_mstr(s)
         value = $(esc(Base.parse(s)))
         println()
         ioout = readavailable(rd)
+#ioout=""
         redirect_stdout(oldstdout)
         print("```jl\n",
             replace(strip($s), r"^"m, "julia> "), "\n",
@@ -27,6 +28,12 @@ macro qcr_mstr(s)
         println("```")
     end
 end
+#ERROR: readcb: bad file descriptor (EBADF)
+# in wait_readnb at stream.jl:282
+# in readavailable at stream.jl:658
+# in reload_path at loading.jl:140
+# in reload at loading.jl:73
+#while loading /Users/m/s/m/current/Parsimonious.jl/test/test_firmware.jl, in expression starting on line 22
 
 # TODO: qcd(command, test_return, test_stdout) -- doctest the command too.
 
@@ -34,16 +41,9 @@ md"""
 Parsimonious.jl
 ===============
 
-PSA: When you learn that it is fun and easy to write parsers you will be
-tempted to invent a complex, heirarchical data format -- or worse a DSL.  Some
-dude on Reddit told me DSL stands for Dog Shit Language. As a professional who
-both works with DSLs and picks up dog shit on reg, I must say I find the
-comparison a little unfair to dog shit. The answer is almost always JSON, XML,
-[config] or CSV for data and some established language for whatever you are
-trying to express. 
+A port of [Parsimonious](https://github.com/erikrose/parsimonious) by the incomperable [Erik Rose](https://github.com/erikrose).
 
-If you're writing parsers to rid the world of entrenched DSLs or arbitrary data
-formats then you're doing it right. Thank you for your attention.
+This is my Learn Julia project and it's been pretty interesting.
 """
 
 qc"""
@@ -121,8 +121,6 @@ It's a parse tree. The goal is to fold it up.
 
 qc"""
 type FwVis <: NodeVisitor end
-visit(::FwVis, n::LeafNode) = nodetext(n)
-visit(::FwVis, n::ParentNode, visited_children...) = visited_children
 """
 
 # TODO: qcr fails with multiple commands. Make it work like qc
@@ -132,45 +130,140 @@ qcr"""
 debug_govisit(FwVis(), tree)
 """
 
+md"""
+We haven't defined any visit methods but we get two for free. These fold the
+tree up into `("FTST",("?",))` which is almost useful, but not really what
+we want. Let's redefine those free rules so we can see what they do.
+"""
+
+qc"""
+visit(::FwVis, n::LeafNode) = nodetext(n)
+visit(::FwVis, n::ParentNode, visited_children...) = visited_children
+"""
+
+qcr"""
+debug_govisit(FwVis(), tree)
+"""
+
+md"""
+Works the same. The `LeafNode` rule just returns whatever text the leaf rule
+matched. The `ParentNode` rule takes the text from one or more `LeafNode`s and
+returns a list. The list is in order. That's important.
+
+Now, let's put the visitor to work doing our bidding.
+"""
+
+qc"""
 visit(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
 visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
+"""
 
-
-function tryit(txt)
-    tree = parse(g, txt)
-    println(tree)
-    println(govisit(FwVis(), tree; debug=true))
-end
-
-g = grammar"""
-    statement = command isquery
-    command = ~"\w{4}"
-    isquery = "?"?
-    """
-
-txt = "FTST?"
-tree = parse(g, txt)
+qcr"""
 debug_govisit(FwVis(), tree)
+"""
 
-tryit("FTST?")
+md"""
+Cool. Now we're getting back `FirmwareCommand("FTST",true,[])` which is what we
+wanted. Of course, you won't want to see the debug info when you're done:
+"""
 
-# With out the '?' isquery is a leaf
+
+qcr"""
+govisit(FwVis(), tree)
+"""
+
+md"""
+Ya dig? Okay, now we add features to the language. The grammar should already
+support:
+
+    FTST
+
+Does it?
+"""
+
+qcr"""
+tree = parse(g, "FTST")
+"""
+
+md"""
+It does. Let's visit:
+"""
+
+qcr"""
+debug_govisit(FwVis(), tree)
+"""
+
+md"""
+Ohs nos! What happened? Looking carefully we see that `:isquery` is no-longer a
+ParentNode but a LeafNode because nothing matched below `isquery` (but
+`isquery` matched the nothing). So we add a `visit`:
+"""
+
+qc"""
 visit(::FwVis, n::LeafNode{:isquery}) = false
+"""
 
-tryit("FTST")
-#@show visit(FwVis(), txt, tree; debug=true)
+md"""
+No questionmark means no query. Let's try again.
+"""
 
-g = grammar"""
-    statements = (statement termination)+
-    statement = command isquery
-    command = ~"\w{4}"
-    isquery = "?"?
-    termination = ~'[;\n]'
-    """
+# TODO: doctest this one
+qcr"""
+govisit(FwVis(), tree)
+"""
 
+md"""
+Great. How to recognize multiple statements? Noticing in the examples that
+statements can be separated by ';' or '\n', let's add a rule to recognize
+breaks between statements:
+
+    termination = ~'[;\\n]'
+
+And another one to recognize multiple statements:
+
+    statements = statement+
+
+So now the grammar looks like:
+"""
+
+qc"""
+    g = grammar\"""
+        statements = (statement termination)+
+        statement = command isquery
+        command = ~"\w{4}"
+        isquery = "?"?
+        termination = ~'[;\n]'
+        \"""
+"""
+
+md"""
+It's important to notice that the grammar now matches `statements` instead of
+`statement` so our previous tests are now broken. Usually `parse` matches the
+first statement in the list, but for testing purposes you can parse against any
+of the statements. Let's check the old functionality:
+"""
+
+qcr"""
+govisit(FwVis(), parse(g.exprs["statement"], "FTST?"))
+"""
+
+md"""
+Good. And the other one:
+"""
+
+qcr"""
+govisit(FwVis(), parse(g.exprs["statement"], "FTST"))
+"""
+
+qc"""
+using Base.Test
+"""
+# TODO: qc above and below are pointlessly split up because apparently you
+# can't say `using thing` and actually use the thing in the same quote.
+qc"""
 function fwtest(name, grammar, text)
     tree = parse(g.exprs[name], text)
-    govisit(FwVis(), tree; debug=true)
+    govisit(FwVis(), tree)
 end
 
 import Base.isequal
@@ -180,49 +273,172 @@ function isequal(a::FirmwareCommand, b::FirmwareCommand)
     a.parameters == b.parameters
 end
 
-using Base.Test
 @test fwtest("statement", g, "FTST?") == FirmwareCommand("FTST",true,[])
 @test fwtest("statement", g, "FTST") == FirmwareCommand("FTST",false,[])
+"""
 
+md"""
+So we haven't lost ground. Now let's see if we can string some statements
+together:
+"""
 
-tree = parse(g.exprs["statement"], "FTST?")
-@show govisit(FwVis(), tree)
-tree = parse(g.exprs["statement"], "FTST")
-@show govisit(FwVis(), tree)
+qcr"""
+fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
+"""
 
+md"""
+Which almost looks good, but clearly we need to `visit` `statemets` differently
+to throw away the useless terminations and just return a list of statements.
+"""
+
+qc"""
 visit(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
-@show fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
+"""
 
-g = grammar"""
+md"""
+Try it again:
+"""
+
+qcr"""
+fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
+"""
+
+md"""
+Nice. I wonder why sometimes list print in {} and other times in []. Oh well.
+
+There's more kinds of statements. Each can have zero one or more parameters. To
+match statements like:
+
+    ASDF
+    ASDF 1
+    ASDF 1,2
+
+We'll make three rules:
+
+    params = more_params / one_param / no_params
+
+This is where ordered choice really comes in handy. First it will try to match
+several parameters, failing that it will try to match one and only failing that
+can we get by with none. Of course if we wrote:
+
+    params = no_params / one_param / more_params
+
+Then we'd have a problem because no_params would always match and then we'd
+never look for one_param or more_params and we'd get a parsing error. Moving
+on:
+
+Also, we have to start thinking about whitespace. If a command is followed by
+parameters then there's at least one space separating them. But in the no
+parameter case you don't need a space. How about:
+
+    params = some_params / no_params
+    some_params = somespace (more_params / one_param)
+    somespace = ~'[ \t]+'
+"""
+
+qc"""
+g = grammar\"""
     statements = (statement termination)+
-    statement = command isquery params
     command = ~"\w{4}"
     isquery = "?"?
     termination = ~'[;\n]'
-    params = more_params / one_param / no_params
-    even_more_params = (comma param)+
-    comma = ','
-    more_params = somespace param even_more_params
-    one_param = somespace param
+
+    ###### new stuff ##########################
+    statement = command isquery params
+    params = some_params / no_params
+    some_params = somespace (more_params / param)
+    more_params = param (comma param)+
     param = ~'[^ \t,;\n]*'
     no_params = ''
+    comma = ','
     somespace = ~'[ \t]+'
-    """
+    \"""
+"""
 
-tree = parse(g, "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
-println(tree)
+md"""
+I don't really want to think about it so let's just look at debug and go from
+there.  """
 
-visit(::FwVis, n::LeafNode{:somespace}) = nothing
-@show fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
+qc"""
+txt = "ASDF;ASDF 1;ASDF 1,2,3,4;"
+tree = parse(g, txt)
+"""
+qcr"""
+debug_govisit(FwVis(), tree)
+"""
 
+md"""
+Wow. The debug output barely fits on my 13-inch laptop screen. I wish I could
+come up with something more compact and just as useful, but this is addressing
+several common problems:
+
+* Parse not matching exactly the way I expected
+* Wrong `visit` method handles a node
+
+If you have a better idea, let me know.
+
+`visit` time:
+"""
+
+qc"""
+visit(::FwVis, n::LeafNode{:no_params}) = nothing
 visit(::FwVis, n::LeafNode{:comma}) = nothing
-visit(::FwVis, n::ParentNode{:even_more_params}, boxes) = [box for box in boxes]
-visit(::FwVis, n::ParentNode{:more_params}, param, even_more_params) = vcat([param], even_more_params)
-visit(::FwVis, n::ParentNode{:one_param}, param) = [param]
-visit(::FwVis, n::LeafNode{:no_params}) = []
-visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params[1])
+visit(::FwVis, n::LeafNode{:somespace}) = nothing
+visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params)
+visit(::FwVis, n::ParentNode{:more_params}, param1::String, param2::String) = (param1, param2)
+visit(::FwVis, n::ParentNode{:more_params}, param::String, params::Tuple) = tuple(param, params...)
+visit(::FwVis, n::ParentNode, one_child) = one_child # don't rebox one child
+"""
 
-@show fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;")
+md"""
+About now we realize, oh shit, things have gotten interesting. Julia's
+multiple-dispatch feature is really working hard for us.
+
+First, we've overloaded one of the most generic visit functions just for the case when there's only one child.
+
+    visit(::FwVis, n::ParentNode, one_child) = one_child # don't rebox one child
+
+Remember, the original (and still existing) generic rule for ParentNode is:
+
+    visit(::FwVis, n::ParentNode, visited_children...) = visited_children
+
+Which basically means that several children will get boxed up. `"a", "b", "c"
+-> ("a", "b", "c")`. The problem is that there's these anonymous rules
+everywhere and when they get called with one child, they put it in a box. So
+after several iterations, you end up with `((("a",),),)`
+
+Also fun is using the type to fix behavior. For example:
+
+    visit(::FwVis, n::ParentNode{:more_params}, param1::String, param2::String) = (param1, param2)
+    visit(::FwVis, n::ParentNode{:more_params}, param::String, params::Tuple) = tuple(param, params...)
+
+We really want `more_params` to just give us a list of parameters, but since the rule is nested like so:
+
+    more_params = param (comma param)+
+
+`visit more_params` is sometimes being called with two individual parameters
+and sometimes with a parameter and another `more_params`. Using the type system
+this way we make sure that what comes out is always a flat list without
+having to think about it further.
+
+Finally, notice that several garbage tokens like `no_params`, `comma` and
+`some_space` return `nothing`. When a `visit` returns `nothing` we don't even
+send the `nothing` to the parent. It's just like it never happened which is
+good for taking out the trash.
+
+I'm a little nervous -- don't get me wrong -- relying so heavily on the
+vagaries of Julia's dispatch system for the programs logic. But it looks like
+it's working! Once you go hack you never go back.
+"""
+
+qcr"""
+debug_govisit(FwVis(), tree)
+"""
+
+
+
+pause()
+
 @test fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;") == 
         {FirmwareCommand("ASDF",false,[]),FirmwareCommand("ASDF",false,["1"]),FirmwareCommand("ASDF",false,{"1","2"}),FirmwareCommand("ASDF",false,["one"]),FirmwareCommand("ASDF",false,{"one","two"})}
 
@@ -381,4 +597,19 @@ firmware_statements = DEFUNCT_visit(FirmwareVisitor(), sample_text, tree)
 # firmware_statements = DEFUNCT_visit(FirmwareVisitor(), sample_text, tree; debug=true)
 
 @show firmware_statements
+
+
+md"""
+PSA: When you learn that it is fun and easy to write parsers you will be
+tempted to invent a complex, heirarchical data format -- or worse a DSL.  Some
+dude on Reddit told me DSL stands for Dog Shit Language. As a professional who
+both works with DSLs and picks up dog shit on reg, I must say I find the
+comparison a little unfair to dog shit. The answer is almost always JSON, XML,
+[config] or CSV for data and some established language for whatever you are
+trying to express. 
+
+If you're writing parsers to rid the world of entrenched DSLs or arbitrary data
+formats then you're doing it right. Thank you for your attention.
+"""
+
 end

@@ -6,7 +6,7 @@ include("Util.jl")
 include("Nodes.jl")
 include("Expressions.jl")
 
-export debug_govisit, Grammar, lookup, rule_grammar, parse, unicode, match,  @grammar_mstr
+export govisit, debug_govisit, Grammar, lookup, rule_grammar, parse, unicode, match,  @grammar_mstr
 
 # You have to import everything you want to overload and export
 # import Expressions: parse, unicode, match

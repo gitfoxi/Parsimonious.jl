@@ -70,10 +70,10 @@ That's better. But still not the structure we want. Let's write some visitors
 to fix it up.
 
     type FwVis <: NodeVisitor end
-    visit2(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
-    visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
-    visit2(::FwVis, n::LeafNode) = nodetext(n)
-    visit2(::FwVis, n::ParentNode, visited_children...) = visited_children
+    visit(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
+    visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
+    visit(::FwVis, n::LeafNode) = nodetext(n)
+    visit(::FwVis, n::ParentNode, visited_children...) = visited_children
 
 And sick them on the tree:
 
@@ -86,13 +86,13 @@ Nice. But what exactly did the visitor do? Let's visit in debug mode to see:
 
 This traces the visit calls which can be really usefull debugging.
 
-    visit2(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
+    visit(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
     returns => "FTST"
-    visit2(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
+    visit(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
     returns => "?"
-    visit2(::FwVis,n::ParentNode{:isquery},questionmark) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:60
+    visit(::FwVis,n::ParentNode{:isquery},questionmark) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:60
     returns => true
-    visit2(::FwVis,n::ParentNode{:statement},command::String,isquery::Bool) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:61
+    visit(::FwVis,n::ParentNode{:statement},command::String,isquery::Bool) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:61
     returns => FirmwareCommand("FTST",true,[])
 
 Let's take it step-by-step. `govisit` takes a visitor and a parse tree. It
@@ -104,7 +104,7 @@ for it then it falls back to a generic one like in this case:
 
 Gets visited by the generic:
 
-    visit2(::FwVis, n::LeafNode) = nodetext(n)
+    visit(::FwVis, n::LeafNode) = nodetext(n)
 
 Which simply:
 
@@ -120,11 +120,11 @@ returned in order. So when we get to:
 
 The Leaf under it has returned "?" so it calls the function:
 
-    visit2(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
+    visit(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
 
 Like this:
 
-    visit2(FwVis,n,"?")
+    visit(FwVis,n,"?")
 
 Which:
 
@@ -147,18 +147,18 @@ Does it?
 It does. Let's visit:
 
     julia> govisit(FwVis(), tree; debug=true)
-    visit2(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
+    visit(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
     returns => "FTST"
-    visit2(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
+    visit(::FwVis,n::LeafNode{T}) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:62
     returns => ""
-    visit2(::FwVis,n::ParentNode{T},visited_children...) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:63
+    visit(::FwVis,n::ParentNode{T},visited_children...) at /Users/m/s/m/current/Parsimonious.jl/test_firmware.jl:63
     returns => ("FTST","")
 
 Ohs nos! What happened? Looking carefully we see that `:isquery` is no-longer a
 ParentNode but a LeafNode because nothing matched below `isquery` (but
 `isquery` matched the nothing). So we add `visit`:
 
-    visit2(::FwVis, n::LeafNode{:isquery}) = false
+    visit(::FwVis, n::LeafNode{:isquery}) = false
 
 No questionmark means no query. Let's try again.
 
@@ -231,7 +231,7 @@ Which gives:
 Which almost looks good, but clearly we need to `visit` `statemets` differently
 to throw away the useless terminations and just return a list of statements.
 
-    visit2(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
+    visit(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
 
 Try it again:
 
@@ -317,7 +317,7 @@ tutorial -- is that if `visit` returns `nothing` then it will get wiped from
 thing passed to it's parent's visit like it never happened. We can use this to
 get rid of useless `somespace`.
 
-    visit2(::FwVis, n::LeafNode{:somespace}) = nothing
+    visit(::FwVis, n::LeafNode{:somespace}) = nothing
 
 Testing this it looks good though a little messed up because we haven't dealth
 with `visit`s to the other things:
@@ -327,12 +327,12 @@ with `visit`s to the other things:
 
 So, let's do that:
 
-    visit2(::FwVis, n::LeafNode{:comma}) = nothing
-    visit2(::FwVis, n::ParentNode{:even_more_params}, boxes) = [box for box in boxes]
-    visit2(::FwVis, n::ParentNode{:more_params}, param, even_more_params) = vcat([param], even_more_params)
-    visit2(::FwVis, n::ParentNode{:one_param}, param) = [param]
-    visit2(::FwVis, n::LeafNode{:no_params}) = []
-    visit2(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params[1])
+    visit(::FwVis, n::LeafNode{:comma}) = nothing
+    visit(::FwVis, n::ParentNode{:even_more_params}, boxes) = [box for box in boxes]
+    visit(::FwVis, n::ParentNode{:more_params}, param, even_more_params) = vcat([param], even_more_params)
+    visit(::FwVis, n::ParentNode{:one_param}, param) = [param]
+    visit(::FwVis, n::LeafNode{:no_params}) = []
+    visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool, params) = FirmwareCommand(command, isquery, params[1])
 
 Obviously I didn't crap this out fully formed. I wrote and tested each line
 carefully refering back to the parse tree and the debug output.
