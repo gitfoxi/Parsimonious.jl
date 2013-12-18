@@ -429,18 +429,21 @@ good for taking out the trash.
 I'm a little nervous -- don't get me wrong -- relying so heavily on the
 vagaries of Julia's dispatch system for the programs logic. But it looks like
 it's working! Once you go hack you never go back.
+
+Oh, and obviously I didn't crap this out fully formed. I wrote and tested each line
+carefully refering back to the debug table.
 """
 
 qcr"""
 debug_govisit(FwVis(), tree)
 """
 
+# A quick test to guard against regression.
+@test fwtest("statements", g, txt) ==
+    {FirmwareCommand("ASDF",false,()),FirmwareCommand("ASDF",false,"1"),FirmwareCommand("ASDF",false,("1","2","3","4"))}
 
 
 pause()
-
-@test fwtest("statements", g,  "ASDF;ASDF 1;ASDF 1,2;ASDF one;ASDF one,two;") == 
-        {FirmwareCommand("ASDF",false,[]),FirmwareCommand("ASDF",false,["1"]),FirmwareCommand("ASDF",false,{"1","2"}),FirmwareCommand("ASDF",false,["one"]),FirmwareCommand("ASDF",false,{"one","two"})}
 
 g = grammar"""
     statements = (statement termination)+

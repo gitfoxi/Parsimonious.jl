@@ -165,9 +165,9 @@ No questionmark means no query. Let's try again.
     julia> govisit(FwVis(), tree)
     FirmwareCommand("FTST",false,[])
 
-Great. How to recognize multiple statements? Recognizing from the examples that
-they can be separated by ';' or '\n', let's add a rule to recognize breaks
-between statements:
+Great. How to recognize multiple statements? Noticing in the examples that
+statements can be separated by ';' or '\n', let's add a rule to recognize
+breaks between statements:
 
     termination = ~'[;\\n]'
 
@@ -344,7 +344,7 @@ parenthesized lists. Updating the param rule to look like:
     param = bare / quoted / list
     bare = ~'[^ \t,;\n")(]*'
     dq = '"'
-    quoted = dq ~'[^"]' dq
+    quoted = dq ~'[^"]' dq  # TODO: support escaped \" -- you know how
     open_paren = '('
     close_paren = ')'
     list = open_paren params close_paren
