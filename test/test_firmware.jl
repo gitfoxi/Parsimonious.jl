@@ -6,7 +6,7 @@ macro md_mstr(s) println(s) end
 # qc""" -- quote code -- run and print code -- don't print result
 macro qc_mstr(s)
     quote
-        println("```jl\n", $s, "```")
+        println("```jl\n", strip(rstrip($s)), "\n```")
         $(esc(Base.parse("begin " * s * " end")))
     end
 end
@@ -25,7 +25,7 @@ macro qcr_mstr(s)
         print("```jl\n",
             replace(strip($s), r"^"m, "julia> "), "\n",
             rstrip(repr(value) * "\n" * ioout))
-        println("```")
+        println("\n```")
     end
 end
 #ERROR: readcb: bad file descriptor (EBADF)
@@ -41,9 +41,9 @@ md"""
 Parsimonious.jl
 ===============
 
-A port of [Parsimonious](https://github.com/erikrose/parsimonious) by the incomperable [Erik Rose](https://github.com/erikrose).
+A port of [Parsimonious](https://github.com/erikrose/parsimonious). Thanks, [Erik](https://github.com/erikrose), for composing an outstanding tool.
 
-This is my Learn Julia project and it's been pretty interesting.
+Porting Parsimonious to Julia is my Learn Julia project and it's been pretty interesting.
 """
 
 qc"""
@@ -131,6 +131,9 @@ debug_govisit(FwVis(), tree)
 """
 
 md"""
+**Sorry if you're reading this on Github you'll have to scroll the debug left
+and right to see it. It's pretty wide. I don't know what to do about that.**
+
 We haven't defined any visit methods but we get two for free. These fold the
 tree up into `("FTST",("?",))` which is almost useful, but not really what
 we want. Let's redefine those free rules so we can see what they do.

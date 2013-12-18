@@ -2,12 +2,11 @@
 Parsimonious.jl
 ===============
 
-A port of [Parsimonious](https://github.com/erikrose/parsimonious) by the incomperable [Erik Rose](https://github.com/erikrose).
+A port of [Parsimonious](https://github.com/erikrose/parsimonious). Thanks, [Erik](https://github.com/erikrose), for composing an outstanding tool.
 
-This is my Learn Julia project and it's been pretty interesting.
+Porting Parsimonious to Julia is my Learn Julia project and it's been pretty interesting.
 
 ```jl
-
 using Parsimonious
 import Parsimonious.visit
 ```
@@ -29,7 +28,6 @@ some fuckwit to communicate with an HP 93k tester. It looks like this:
 We'd like to get these commands into structure like:
 
 ```jl
-
 type FirmwareCommand
     command::String
     isquery::Bool
@@ -45,7 +43,6 @@ try to parse:
 Into:
 
 ```jl
-
 FirmwareCommand("FTST",true,[])
 ```
 
@@ -53,12 +50,12 @@ This is easily matched with a regex:
 
 ```jl
 julia> match(r"(\w{4})(\??)", "FTST?")
-RegexMatch("FTST?", 1="FTST", 2="?")```
+RegexMatch("FTST?", 1="FTST", 2="?")
+```
 
 And almost as easily with a grammar:
 
 ```jl
-
 g = grammar"""
     statement = command isquery
     command = ~"\w{4}"
@@ -70,12 +67,12 @@ julia> tree = parse(g, "FTST?")
 1 ParentNode{:statement}                                                'FTST?'
   .  1 LeafNode{:command}                                                'FTST'
   .  5 ParentNode{:isquery}                                                 '?'
-  .    .  5 LeafNode{:}                                                     '?'```
+  .    .  5 LeafNode{:}                                                     '?'
+```
 
 It's a parse tree. The goal is to fold it up.
 
 ```jl
-
 type FwVis <: NodeVisitor end
 ```
 ```jl
@@ -86,14 +83,17 @@ julia> debug_govisit(FwVis(), tree)
  .  . visit(::NodeVisitor,n::LeafNode{T})                    |           | "?" -> "?"                        | 
  . visit(::NodeVisitor,n::ParentNode{T},visited_children...) | isquery   | "?" -> ("?",)                     | 
 visit(::NodeVisitor,n::ParentNode{T},visited_children...)    | statement | "FTST", ("?",) -> ("FTST",("?",)) | 
----------------------------------------------------------------------------------------------------------------```
+---------------------------------------------------------------------------------------------------------------
+```
+
+**Sorry if you're reading this on Github you'll have to scroll the debug left
+and right to see it. It's pretty wide. I don't know what to do about that.**
 
 We haven't defined any visit methods but we get two for free. These fold the
 tree up into `("FTST",("?",))` which is almost useful, but not really what
 we want. Let's redefine those free rules so we can see what they do.
 
 ```jl
-
 visit(::FwVis, n::LeafNode) = nodetext(n)
 visit(::FwVis, n::ParentNode, visited_children...) = visited_children
 ```
@@ -105,7 +105,8 @@ julia> debug_govisit(FwVis(), tree)
  .  . visit(::FwVis,n::LeafNode{T})                    |           | "?" -> "?"                        | 
  . visit(::FwVis,n::ParentNode{T},visited_children...) | isquery   | "?" -> ("?",)                     | 
 visit(::FwVis,n::ParentNode{T},visited_children...)    | statement | "FTST", ("?",) -> ("FTST",("?",)) | 
----------------------------------------------------------------------------------------------------------```
+---------------------------------------------------------------------------------------------------------
+```
 
 Works the same. The `LeafNode` rule just returns whatever text the leaf rule
 matched. The `ParentNode` rule takes the text from one or more `LeafNode`s and
@@ -114,7 +115,6 @@ returns a list. The list is in order. That's important.
 Now, let's put the visitor to work doing our bidding.
 
 ```jl
-
 visit(::FwVis, n::ParentNode{:isquery}, questionmark) = questionmark == "?"
 visit(::FwVis, n::ParentNode{:statement}, command::String, isquery::Bool) = FirmwareCommand(command, isquery, [])
 ```
@@ -126,14 +126,16 @@ FirmwareCommand("FTST",true,[])
  .  . visit(::FwVis,n::LeafNode{T})                                    |           | "?" -> "?"                                      | 
  . visit(::FwVis,n::ParentNode{:isquery},questionmark)                 | isquery   | "?" -> true                                     | 
 visit(::FwVis,n::ParentNode{:statement},command::String,isquery::Bool) | statement | "FTST", true -> FirmwareCommand("FTST",true,[]) | 
----------------------------------------------------------------------------------------------------------------------------------------```
+---------------------------------------------------------------------------------------------------------------------------------------
+```
 
 Cool. Now we're getting back `FirmwareCommand("FTST",true,[])` which is what we
 wanted. Of course, you won't want to see the debug info when you're done:
 
 ```jl
 julia> govisit(FwVis(), tree)
-FirmwareCommand("FTST",true,[])```
+FirmwareCommand("FTST",true,[])
+```
 
 Ya dig? Okay, now we add features to the language. The grammar should already
 support:
@@ -146,7 +148,8 @@ Does it?
 julia> tree = parse(g, "FTST")
 1 ParentNode{:statement}                                                 'FTST'
   .  1 LeafNode{:command}                                                'FTST'
-  .  5 LeafNode{:isquery}                                                    ''```
+  .  5 LeafNode{:isquery}                                                    ''
+```
 
 It does. Let's visit:
 
@@ -157,14 +160,14 @@ julia> debug_govisit(FwVis(), tree)
  . visit(::FwVis,n::LeafNode{T})                    | command   | "FTST" -> "FTST"          | 
  . visit(::FwVis,n::LeafNode{T})                    | isquery   | "" -> ""                  | 
 visit(::FwVis,n::ParentNode{T},visited_children...) | statement | "FTST", "" -> ("FTST","") | 
-----------------------------------------------------------------------------------------------```
+----------------------------------------------------------------------------------------------
+```
 
 Ohs nos! What happened? Looking carefully we see that `:isquery` is no-longer a
 ParentNode but a LeafNode because nothing matched below `isquery` (but
 `isquery` matched the nothing). So we add a `visit`:
 
 ```jl
-
 visit(::FwVis, n::LeafNode{:isquery}) = false
 ```
 
@@ -172,7 +175,8 @@ No questionmark means no query. Let's try again.
 
 ```jl
 julia> govisit(FwVis(), tree)
-FirmwareCommand("FTST",false,[])```
+FirmwareCommand("FTST",false,[])
+```
 
 Great. How to recognize multiple statements? Noticing in the examples that
 statements can be separated by ';' or '\n', let's add a rule to recognize
@@ -187,8 +191,7 @@ And another one to recognize multiple statements:
 So now the grammar looks like:
 
 ```jl
-
-    g = grammar"""
+g = grammar"""
         statements = (statement termination)+
         statement = command isquery
         command = ~"\w{4}"
@@ -204,19 +207,19 @@ of the statements. Let's check the old functionality:
 
 ```jl
 julia> govisit(FwVis(), parse(g.exprs["statement"], "FTST?"))
-FirmwareCommand("FTST",true,[])```
+FirmwareCommand("FTST",true,[])
+```
 
 Good. And the other one:
 
 ```jl
 julia> govisit(FwVis(), parse(g.exprs["statement"], "FTST"))
-FirmwareCommand("FTST",false,[])```
+FirmwareCommand("FTST",false,[])
+```
 ```jl
-
 using Base.Test
 ```
 ```jl
-
 function fwtest(name, grammar, text)
     tree = parse(g.exprs[name], text)
     govisit(FwVis(), tree)
@@ -238,13 +241,13 @@ together:
 
 ```jl
 julia> fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
-((FirmwareCommand("FTST",true,[]),";"),(FirmwareCommand("FTST",true,[]),";"),(FirmwareCommand("FTST",true,[]),"\n"),(FirmwareCommand("FTST",true,[]),"\n"),(FirmwareCommand("FTST",false,[]),";"),(FirmwareCommand("FTST",false,[]),"\n"))```
+((FirmwareCommand("FTST",true,[]),";"),(FirmwareCommand("FTST",true,[]),";"),(FirmwareCommand("FTST",true,[]),"\n"),(FirmwareCommand("FTST",true,[]),"\n"),(FirmwareCommand("FTST",false,[]),";"),(FirmwareCommand("FTST",false,[]),"\n"))
+```
 
 Which almost looks good, but clearly we need to `visit` `statemets` differently
 to throw away the useless terminations and just return a list of statements.
 
 ```jl
-
 visit(::FwVis, n::ParentNode{:statements}, statements...) = [statement_term[1] for statement_term in statements]
 ```
 
@@ -252,7 +255,8 @@ Try it again:
 
 ```jl
 julia> fwtest("statements", g, "FTST?;FTST?;FTST?\nFTST?\nFTST;FTST\n")
-{FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",false,[]),FirmwareCommand("FTST",false,[])}```
+{FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",true,[]),FirmwareCommand("FTST",false,[]),FirmwareCommand("FTST",false,[])}
+```
 
 Nice. I wonder why sometimes list print in {} and other times in []. Oh well.
 
@@ -286,7 +290,6 @@ parameter case you don't need a space. How about:
     somespace = ~'[ \t]+'
 
 ```jl
-
 g = grammar"""
     statements = (statement termination)+
     command = ~"\w{4}"
@@ -308,7 +311,6 @@ g = grammar"""
 I don't really want to think about it so let's just look at debug and go from
 there.  
 ```jl
-
 txt = "ASDF;ASDF 1;ASDF 1,2,3,4;"
 tree = parse(g, txt)
 ```
@@ -368,7 +370,8 @@ visit(::FwVis,n::ParentNode{:statements},statements...)                    | sta
                                                                            |             | ,false,((" ",(("1",((",","2"),(",","3"),(",","4"))),)),)),";") -> {("ASDF" | 
                                                                            |             | ,false,("",)),("ASDF",false,((" ",("1",)),)),("ASDF",false,((" ",(("1",((" | 
                                                                            |             | ,","2"),(",","3"),(",","4"))),)),))}                                       | 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------```
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+```
 
 Wow. The debug output barely fits on my 13-inch laptop screen. I wish I could
 come up with something more compact and just as useful, but this is addressing
@@ -382,7 +385,6 @@ If you have a better idea, let me know.
 `visit` time:
 
 ```jl
-
 visit(::FwVis, n::LeafNode{:no_params}) = nothing
 visit(::FwVis, n::LeafNode{:comma}) = nothing
 visit(::FwVis, n::LeafNode{:somespace}) = nothing
@@ -487,4 +489,5 @@ visit(::FwVis,n::ParentNode{:statements},statements...)                    | sta
                                                                            |             | ,";"), (FirmwareCommand("ASDF",false,("1","2","3","4")),";") -> {FirmwareC | 
                                                                            |             | ommand("ASDF",false,()),FirmwareCommand("ASDF",false,"1"),FirmwareCommand( | 
                                                                            |             | "ASDF",false,("1","2","3","4"))}                                           | 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------```
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+```
